@@ -519,17 +519,20 @@ function renderRevisao() {
 
   // Cabeçalho
   let html = `<thead><tr>
+    <th style="width:30px"><input type="checkbox" id="rev-check-all" onchange="toggleSelectAll(this.checked)" /></th>
     <th>#</th><th>Substância</th><th>Data</th><th>Nº OM</th><th>Nº Doc</th>
     <th style="min-width:140px">Tutor</th><th style="min-width:110px">CPF</th>
     <th style="min-width:180px">Endereço</th><th style="min-width:130px">Prescritor</th>
-    <th>CRMV</th><th style="min-width:100px">Cálculo</th><th>Qtd (g)</th>
+    <th>CRMV</th><th style="min-width:100px">Concentração</th><th>Qtd (g)</th>
     <th>Nº Receita</th><th>Status</th>
   </tr></thead><tbody>`;
 
   dadosCruzados.forEach((d, i) => {
     const cls = d.status === 'Cancelada' ? ' class="row-cancelada"' : '';
     const cpfCls = (d.status === 'Ativa' && !d.cpf) ? 'cpf-missing' : (d.cpf ? 'cpf-ok' : '');
+    const chk = d._selected ? ' checked' : '';
     html += `<tr${cls}>
+      <td><input type="checkbox" data-i="${i}" onchange="toggleSelect(this)"${chk} /></td>
       <td>${i + 1}</td>
       <td>${d.substancia}</td>
       <td>${d.data ? fmtData(d.data) : d.dataStr}</td>
@@ -552,11 +555,37 @@ function renderRevisao() {
   });
   html += '</tbody>';
   table.innerHTML = html;
+  updateSelCount();
   document.getElementById('rev-count').textContent =
     `${dadosCruzados.length} registros · ${dadosCruzados.filter(d=>d.status==='Ativa').length} ativos`;
 }
 
 function esc(s) { return String(s || '').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+
+function toggleSelect(el) {
+  const i = parseInt(el.dataset.i);
+  dadosCruzados[i]._selected = el.checked;
+  updateSelCount();
+}
+
+function toggleSelectAll(checked) {
+  dadosCruzados.forEach(d => { d._selected = checked; });
+  document.querySelectorAll('#rev-table input[type="checkbox"]').forEach(cb => { cb.checked = checked; });
+  updateSelCount();
+}
+
+function updateSelCount() {
+  const n = dadosCruzados.filter(d => d._selected).length;
+  const el = document.getElementById('sel-count');
+  if (el) el.textContent = n > 0 ? `${n} selecionado(s)` : '';
+}
+
+/** Retorna os registros para impressão: selecionados (se houver), senão todos ativos */
+function getSelectedDados(source) {
+  const dados = source || dadosCruzados;
+  const sel = dados.filter(d => d._selected && d.status === 'Ativa');
+  return sel.length > 0 ? sel : dados.filter(d => d.status === 'Ativa');
+}
 
 function revEdit(el) {
   const i = parseInt(el.dataset.i);
@@ -920,6 +949,12 @@ function gerarExcel(dados, estInicial, nomeEstab, periodoLabel) {
 function salvarNoHistorico(dados, estInicial, estoquesFinal, periodoLabel, nomeEstab) {
   const hist = loadHistorico();
   const datas = dados.filter(d => d.data).map(d => d.data);
+  // Serializar registros (Date → ISO string) para reimpressão futura
+  const registros = dados.map(d => ({
+    ...d,
+    data: d.data instanceof Date ? d.data.toISOString() : d.data,
+    _selected: undefined,
+  }));
   hist.push({
     id:              Date.now(),
     geradoEm:        new Date().toISOString(),
@@ -931,6 +966,7 @@ function salvarNoHistorico(dados, estInicial, estoquesFinal, periodoLabel, nomeE
     substanciasAtivas: [...new Set(dados.filter(d => d.status === 'Ativa').map(d => d.substancia))],
     estoquesInicial: estInicial,
     estoquesFinal,
+    registros,
   });
   saveHistorico(hist);
 }
@@ -958,6 +994,12 @@ function renderHistorico() {
       return `<span class="hist-pill">${s.nome} <span>${fin !== undefined ? fin.toFixed(4) + 'g' : '—'}</span></span>`;
     }).join('');
 
+    const temRegistros = reg.registros && reg.registros.length > 0;
+    const substOpts = temRegistros
+      ? [...new Set(reg.registros.filter(r=>r.status==='Ativa').map(r=>identificarSubstancia(r.substancia)).filter(Boolean))]
+          .map(n => `<option value="${n}">${n}</option>`).join('')
+      : '';
+
     div.innerHTML = `
       <div class="hist-header">
         <div class="hist-periodo">${reg.periodoLabel || 'Período ' + (reg.dataInicio ? fmtData(new Date(reg.dataInicio)) : '?')}</div>
@@ -971,10 +1013,125 @@ function renderHistorico() {
       <div class="hist-actions">
         <button class="btn-secondary" style="font-size:.75rem;padding:7px 14px"
           onclick="usarComoInicial(${reg.id})">↑ Usar como est. inicial</button>
+        ${temRegistros ? `
+        <select id="hist-subst-${reg.id}" style="font-family:var(--mono);font-size:.72rem;padding:5px 8px;
+          background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text)">
+          ${substOpts}
+        </select>
+        <button class="btn-secondary" style="font-size:.72rem;padding:5px 10px"
+          onclick="reimprimirCorpo(${reg.id})">🖨 Corpo</button>
+        <button class="btn-secondary" style="font-size:.72rem;padding:5px 10px"
+          onclick="reimprimirEtiquetas(${reg.id},'grade')">🏷 Etq 3×5</button>
+        <button class="btn-secondary" style="font-size:.72rem;padding:5px 10px"
+          onclick="reimprimirEtiquetas(${reg.id},'linear')">🏷 Etq Livro</button>
+        ` : '<span style="font-size:.65rem;color:var(--muted);font-family:var(--mono)">Sem dados para reimprimir (gerado antes da v3.1)</span>'}
         <button class="btn-danger" onclick="excluirRegistro(${reg.id})">Excluir</button>
       </div>`;
     lista.appendChild(div);
   });
+}
+
+function getHistRegistros(id) {
+  const reg = loadHistorico().find(r => r.id === id);
+  if (!reg || !reg.registros) return null;
+  // Reconstituir datas
+  return { ...reg, registros: reg.registros.map(d => ({
+    ...d,
+    data: d.data ? new Date(d.data) : null,
+  }))};
+}
+
+function reimprimirCorpo(id) {
+  const reg = getHistRegistros(id);
+  if (!reg) { alert('Dados detalhados não disponíveis neste registro.'); return; }
+
+  const selEl = document.getElementById('hist-subst-' + id);
+  const nomeSubst = selEl ? selEl.value : null;
+  const s = SUBSTANCIAS.find(x => x.nome === nomeSubst);
+  if (!s) return;
+
+  const estIni = reg.estoquesInicial?.[s.nome] || 0;
+  const ds = reg.registros.filter(d =>
+    (d.substancia.toUpperCase().includes(s.nome.toUpperCase()) ||
+     d.substancia.includes(s.dcb)) && d.status === 'Ativa'
+  );
+
+  // Montar movimentos
+  const movStore = getSubstMovimentos(s.nome);
+  const todosLanc = [];
+  ds.forEach(d => {
+    todosLanc.push({
+      tipo: 'saida', data: d.data, qtd: d.qtdG || 0,
+      nrOm: d.nrOm, nrDoc: d.nrDoc, crmvRaw: d.crmvRaw,
+      prescritor: d.prescritor, calculo: d.calculo, nrReceita: d.nrReceita,
+    });
+  });
+  movStore.lancamentos.filter(l => l.tipo === 'entrada').forEach(l => {
+    todosLanc.push({ tipo: 'entrada', data: l.data ? new Date(l.data + 'T12:00:00') : null, qtd: l.qtd, descricao: l.descricao });
+  });
+  movStore.lancamentos.filter(l => l.tipo === 'perda').forEach(l => {
+    todosLanc.push({ tipo: 'perda', data: l.data ? new Date(l.data + 'T12:00:00') : null, qtd: l.qtd, descricao: l.descricao });
+  });
+  todosLanc.sort((a, b) => {
+    const da = a.data ? (a.data instanceof Date ? a.data.getTime() : new Date(a.data).getTime()) : 0;
+    const db = b.data ? (b.data instanceof Date ? b.data.getTime() : new Date(b.data).getTime()) : 0;
+    return da - db;
+  });
+
+  let html = `<div class="print-corpo">
+    <h2>LIVRO DE REGISTRO DE ESTOQUE DE SUBSTÂNCIAS SUJEITAS A CONTROLE ESPECIAL DE USO VETERINÁRIO</h2>
+    <h3>SUBSTÂNCIA (DCB): ${s.nome} (${s.dcb}) &nbsp;|&nbsp; Lista: ${s.lista} &nbsp;|&nbsp; ${reg.estabelecimento}<br>
+    Período: ${reg.periodoLabel}</h3>
+    <table>
+      <tr>
+        <th style="width:18mm">DATA</th>
+        <th>EST. INICIAL (g)</th><th>ENTRADA (g)</th><th>SAÍDA (g)</th>
+        <th>PERDAS (g)</th><th>EST. FINAL (g)</th><th style="width:22mm">REG / NR DOC</th>
+        <th class="col-info">OUTRAS INFORMAÇÕES</th>
+      </tr>
+      <tr class="row-est">
+        <td>EST. INICIAL</td><td>${estIni.toFixed(4)}</td>
+        <td></td><td></td><td></td><td>${estIni.toFixed(4)}</td>
+        <td></td><td class="col-info">Estoque inicial — ${reg.periodoLabel}</td>
+      </tr>`;
+
+  let saldo = estIni;
+  for (const l of todosLanc) {
+    const dt = l.data instanceof Date ? l.data : (l.data ? new Date(l.data) : null);
+    const entrada = l.tipo === 'entrada' ? l.qtd : 0;
+    const saida   = l.tipo === 'saida'   ? l.qtd : 0;
+    const perda   = l.tipo === 'perda'   ? l.qtd : 0;
+    const novoSaldo = arred(saldo + entrada - saida - perda);
+    let info = '';
+    if (l.tipo === 'saida') info = [`Rec: ${l.nrReceita}`, l.prescritor, l.calculo].filter(Boolean).join(' | ');
+    else if (l.tipo === 'entrada') info = `ENTRADA: ${l.descricao || ''}`;
+    else info = `PERDA: ${l.descricao || ''}`;
+    html += `<tr>
+      <td class="col-data">${dt ? fmtData(dt) : ''}</td>
+      <td>${arred(saldo).toFixed(4)}</td>
+      <td>${entrada ? entrada.toFixed(4) : ''}</td>
+      <td>${saida ? saida.toFixed(4) : ''}</td>
+      <td>${perda ? perda.toFixed(4) : ''}</td>
+      <td>${novoSaldo.toFixed(4)}</td>
+      <td>${l.nrOm ? l.nrOm + '/' + l.nrDoc : (l.tipo === 'entrada' ? 'ENT' : 'PER')}</td>
+      <td class="col-info">${info}</td>
+    </tr>`;
+    saldo = novoSaldo;
+  }
+  html += `<tr class="row-est">
+      <td>EST. FINAL</td><td></td><td></td><td></td><td></td>
+      <td>${arred(saldo).toFixed(4)}</td><td></td>
+      <td class="col-info">Estoque final do período</td>
+    </tr></table></div>`;
+
+  document.getElementById('print-area').innerHTML = html;
+  window.print();
+}
+
+function reimprimirEtiquetas(id, modo) {
+  const reg = getHistRegistros(id);
+  if (!reg) { alert('Dados detalhados não disponíveis neste registro.'); return; }
+  imprimirEtiquetas(modo, reg.registros);
 }
 
 function usarComoInicial(id) {
@@ -1059,10 +1216,11 @@ function imprimirCorpo() {
   const estInicial   = getEstoqueInicial();
   const estIni       = estInicial[s.nome] || 0;
 
-  // Filtrar dados da substância
-  const ds = dadosCruzados.filter(d =>
-    (d.substancia.toUpperCase().includes(s.nome.toUpperCase()) ||
-     d.substancia.includes(s.dcb)) && d.status === 'Ativa'
+  // Filtrar dados da substância (respeitando seleção)
+  const base = getSelectedDados();
+  const ds = base.filter(d =>
+    d.substancia.toUpperCase().includes(s.nome.toUpperCase()) ||
+    d.substancia.includes(s.dcb)
   );
 
   // Montar movimentos (mesmo merge do gerarExcel)
@@ -1150,38 +1308,56 @@ function imprimirCorpo() {
 // ── IMPRESSÃO — ETIQUETAS [FASE 1b] ─────────────────────────
 // ══════════════════════════════════════════════════════════════
 
-function imprimirEtiquetas(modo) {
-  if (!dadosCruzados.length) return;
-  const ativos = dadosCruzados.filter(d => d.status === 'Ativa');
-  if (!ativos.length) { alert('Nenhuma dispensação ativa para etiquetas.'); return; }
+/** Gera HTML de uma etiqueta (usado por ambos os layouts) */
+function etqDataStr(d) {
+  if (d.data instanceof Date) return fmtData(d.data);
+  if (d.data && typeof d.data === 'string') {
+    const dt = new Date(d.data);
+    return isNaN(dt) ? d.dataStr || d.data : fmtData(dt);
+  }
+  return d.dataStr || '';
+}
+
+function imprimirEtiquetas(modo, dadosExternos) {
+  const source = dadosExternos || dadosCruzados;
+  if (!source.length) return;
+  const lista = dadosExternos ? source.filter(d => d.status === 'Ativa') : getSelectedDados(source);
+  if (!lista.length) { alert('Nenhuma dispensação ativa para etiquetas.'); return; }
 
   let html = '';
 
   if (modo === 'linear') {
     // ── Layout linear: 1 etiqueta por linha, largura A4, para colar no livro ──
     html = '<div class="print-etiquetas-linear">';
-    for (const d of ativos) {
+    for (const d of lista) {
       html += `<div class="etq-linear">
-        <div class="etq-l-subst">${identificarSubstancia(d.substancia) || d.substancia}</div>
-        <div class="etq-l-row">
+        <div class="etq-l-top">
+          <strong>${d.substancia}</strong>
+          <span>OM: ${d.nrOm}</span>
+          <span>DOC: ${d.nrDoc}</span>
+          <span>Data: ${etqDataStr(d)}</span>
+          <span>Qtd: ${d.qtdG ? d.qtdG.toFixed(4) + ' g' : ''}</span>
+        </div>
+        <div class="etq-l-body">
           <span><strong>Tutor:</strong> ${d.clienteFull}</span>
-          <span><strong>Vet.:</strong> ${d.prescritor} — CRMV ${d.crmvNrCE || d.crmvNr}</span>
+          <span><strong>CPF:</strong> ${d.cpf || '_______________'}</span>
+          <span><strong>End.:</strong> ${d.endereco || ''}</span>
         </div>
-        <div class="etq-l-row">
-          <span><strong>Cálculo:</strong> ${d.calculo}${d.doseMg ? ' (' + d.doseMg + ' mg)' : ''}</span>
-          <span><strong>Data:</strong> ${d.data ? fmtData(d.data) : d.dataStr}</span>
-          <span><strong>Qtd:</strong> ${d.qtdG ? d.qtdG.toFixed(4) + ' g' : ''}</span>
+        <div class="etq-l-body">
+          <span><strong>Prescritor:</strong> ${d.prescritor}</span>
+          <span><strong>CRMV:</strong> ${d.crmvNrCE || d.crmvNr || ''}</span>
+          <span><strong>Concentração:</strong> ${d.calculo || ''}${d.doseMg ? ' (' + d.doseMg + ' mg)' : ''}</span>
         </div>
-        <div class="etq-l-om">OM ${d.nrOm}<br>Rec ${d.nrReceita}</div>
+        <div class="etq-l-rt">RT: <span class="etq-l-rt-line"></span></div>
       </div>`;
     }
     html += '</div>';
 
   } else {
-    // ── Layout grade: 3×5 = 15 etiquetas por folha A4, para colar nas receitas ──
+    // ── Layout grade: 3×5 = 15 etiquetas por folha A4 ──
     const paginas = [];
-    for (let i = 0; i < ativos.length; i += 15) {
-      paginas.push(ativos.slice(i, i + 15));
+    for (let i = 0; i < lista.length; i += 15) {
+      paginas.push(lista.slice(i, i + 15));
     }
     html = '<div class="print-etiquetas">';
     for (const pag of paginas) {
@@ -1189,11 +1365,13 @@ function imprimirEtiquetas(modo) {
       for (const d of pag) {
         html += `<div class="etq">
           <div class="etq-subst">${d.substancia}</div>
+          <div class="etq-field"><strong>OM:</strong> ${d.nrOm} &nbsp; <strong>DOC:</strong> ${d.nrDoc} &nbsp; <strong>Data:</strong> ${etqDataStr(d)}</div>
           <div class="etq-field"><strong>Tutor:</strong> ${d.clienteFull}</div>
-          <div class="etq-field"><strong>Vet.:</strong> ${d.prescritor} — CRMV ${d.crmvNrCE || d.crmvNr}</div>
-          <div class="etq-field"><strong>Cálculo:</strong> ${d.calculo}${d.doseMg ? ' ('+d.doseMg+' mg)' : ''}</div>
-          <div class="etq-field"><strong>Data:</strong> ${d.data ? fmtData(d.data) : d.dataStr} &nbsp; <strong>Qtd:</strong> ${d.qtdG ? d.qtdG.toFixed(4) + ' g' : ''}</div>
-          <div class="etq-field"><strong>OM:</strong> ${d.nrOm} &nbsp; <strong>Receita:</strong> ${d.nrReceita}</div>
+          <div class="etq-field"><strong>CPF:</strong> ${d.cpf || '_______________'} </div>
+          <div class="etq-field"><strong>End.:</strong> ${d.endereco || ''}</div>
+          <div class="etq-field"><strong>Prescritor:</strong> ${d.prescritor} &nbsp; <strong>CRMV:</strong> ${d.crmvNrCE || d.crmvNr || ''}</div>
+          <div class="etq-field"><strong>Conc.:</strong> ${d.calculo || ''}${d.doseMg ? ' (' + d.doseMg + ' mg)' : ''} &nbsp; <strong>Qtd:</strong> ${d.qtdG ? d.qtdG.toFixed(4) + ' g' : ''}</div>
+          <div class="etq-rt"><span>RT:</span> <span class="etq-rt-line"></span></div>
         </div>`;
       }
       for (let i = pag.length; i < 15; i++) {
