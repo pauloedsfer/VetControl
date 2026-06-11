@@ -214,6 +214,11 @@
     .modal h3{font-family:var(--display);font-size:1rem;font-weight:800;margin-bottom:16px}
     .modal-close{float:right;background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer}
 
+    /* ── checkbox seleção ── */
+    .rev-table input[type="checkbox"]{width:16px;height:16px;accent-color:var(--accent);cursor:pointer}
+    .sel-bar{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
+    .sel-count{font-family:var(--mono);font-size:.68rem;color:var(--accent)}
+
     /* ══════════ PRINT STYLES ══════════ */
     #print-area{display:none}
 
@@ -237,28 +242,29 @@
 
       /* ── Etiquetas grade (3×5 = 15/folha) ── */
       .print-etiquetas{font-family:Arial,sans-serif}
-      .etq-page{width:210mm;height:297mm;padding:8mm 5mm;display:grid;
-        grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(5,1fr);gap:2mm;page-break-after:always}
+      .etq-page{width:210mm;height:297mm;padding:6mm 4mm;display:grid;
+        grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(5,1fr);gap:1.5mm;page-break-after:always}
       .etq-page:last-child{page-break-after:auto}
-      .etq{border:1px solid #999;border-radius:2mm;padding:3mm;display:flex;flex-direction:column;
-        justify-content:center;font-size:7pt;line-height:1.4;overflow:hidden}
-      .etq strong{font-size:8pt}
-      .etq .etq-subst{font-size:8.5pt;font-weight:bold;border-bottom:1px solid #ccc;padding-bottom:1mm;margin-bottom:1mm}
-      .etq .etq-field{margin-bottom:.5mm}
-      .etq .etq-small{font-size:6pt;color:#555}
+      .etq{border:1px solid #999;border-radius:1.5mm;padding:2mm 2.5mm;display:flex;flex-direction:column;
+        justify-content:center;font-size:6.5pt;line-height:1.35;overflow:hidden}
+      .etq strong{font-size:6.5pt}
+      .etq .etq-subst{font-size:7.5pt;font-weight:bold;border-bottom:1px solid #ccc;padding-bottom:.5mm;margin-bottom:.5mm}
+      .etq .etq-field{margin-bottom:.3mm}
+      .etq .etq-rt{margin-top:auto;border-top:1px solid #ccc;padding-top:1mm;font-size:6pt;
+        display:flex;justify-content:space-between;align-items:center}
+      .etq .etq-rt-line{border-bottom:1px solid #000;width:30mm;display:inline-block;height:3mm}
 
       /* ── Etiquetas lineares (1 por linha, largura A4) ── */
       .print-etiquetas-linear{font-family:Arial,sans-serif;padding:5mm}
-      .etq-linear{border:1px solid #999;border-radius:1.5mm;padding:2.5mm 4mm;margin-bottom:1.5mm;
-        display:grid;grid-template-columns:auto 1fr 1fr auto;gap:2mm 4mm;align-items:center;
-        font-size:7.5pt;line-height:1.3;page-break-inside:avoid}
-      .etq-linear .etq-l-subst{font-size:8.5pt;font-weight:bold;grid-row:1/3;
-        writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg);
-        border-right:1px solid #ccc;padding-right:3mm;text-align:center;letter-spacing:.5pt}
-      .etq-linear .etq-l-row{display:flex;gap:3mm;flex-wrap:wrap}
-      .etq-linear strong{font-size:7pt}
-      .etq-linear .etq-l-om{font-family:monospace;font-size:7pt;text-align:right;
-        grid-row:1/3;border-left:1px solid #ccc;padding-left:3mm;white-space:nowrap}
+      .etq-linear{border:1px solid #999;border-radius:1.5mm;padding:2mm 3mm;margin-bottom:1.5mm;
+        font-size:7pt;line-height:1.3;page-break-inside:avoid;
+        display:grid;grid-template-columns:1fr auto;gap:0 3mm}
+      .etq-linear .etq-l-top{display:flex;gap:3mm;flex-wrap:wrap;grid-column:1/3;
+        border-bottom:1px solid #ddd;padding-bottom:1mm;margin-bottom:1mm}
+      .etq-linear .etq-l-top strong{font-size:7.5pt}
+      .etq-linear .etq-l-body{display:flex;gap:3mm;flex-wrap:wrap}
+      .etq-linear .etq-l-rt{text-align:right;display:flex;align-items:center;gap:2mm;font-size:6.5pt}
+      .etq-linear .etq-l-rt-line{border-bottom:1px solid #000;width:25mm;display:inline-block;height:3mm}
     }
   </style>
 </head>
@@ -278,7 +284,7 @@
       <h1>Controlados</h1>
       <p>R S O Manipulação Animal · GO 0198-8</p>
     </div>
-    <span class="version-tag">v3.0</span>
+    <span class="version-tag">v3.1</span>
   </header>
 
   <!-- Tabs -->
@@ -347,6 +353,14 @@
       <div class="section-label">03 · Revisão dos dados cruzados</div>
       <div id="cpf-alert" class="cpf-alert" style="display:none"></div>
       <div class="card" style="padding:12px">
+        <div class="sel-bar">
+          <button class="btn-secondary btn-sm" onclick="toggleSelectAll(true)">☑ Selecionar todos</button>
+          <button class="btn-secondary btn-sm" onclick="toggleSelectAll(false)">☐ Limpar seleção</button>
+          <span class="sel-count" id="sel-count"></span>
+          <span style="margin-left:auto;font-size:.65rem;color:var(--muted);font-family:var(--mono)">
+            Selecione registros para imprimir apenas estes
+          </span>
+        </div>
         <div class="rev-scroll" style="max-height:55vh;overflow-y:auto">
           <table class="rev-table" id="rev-table"></table>
         </div>
