@@ -1,226 +1,134 @@
 /**
- * CONTROLADOS v3.2 — R S O MANIPULAÇÃO ANIMAL
- * Novidades v3.2:
- *  - Tudo em MAIÚSCULAS ao processar
- *  - Cadastro de endereço vinculado ao tutor
- *  - Período automático (datas min/max)
- *  - Cadastro de Prescritor + CRMV
- *  - Validação automática (campos faltantes)
- *  - Filtro na tabela de revisão
- *  - Alerta de estoque negativo
- *  - Lembrete de backup (7 dias)
- *  - Resumo para fiscalização MAPA
+ * CONTROLADOS v4.0 — R S O MANIPULAÇÃO ANIMAL
+ * Movimentos como fonte única de verdade
+ * Conformidade IN 35/2017 MAPA
  */
 
-// ══════════ CONSTANTES ══════════
-
-const SUBSTANCIAS = [
-  { nome: 'Gabapentina',   lista: 'C1', dcb: '04369' },
-  { nome: 'Fluoxetina',    lista: 'C1', dcb: '03094' },
-  { nome: 'Amitriptilina', lista: 'C1', dcb: '00423' },
-  { nome: 'Selegilina',    lista: 'C1', dcb: '07929' },
-  { nome: 'Tramadol',      lista: 'A2', dcb: '08806' },
-  { nome: 'Codeína',       lista: 'A2', dcb: '01706' },
-  { nome: 'Ribavirina',    lista: 'C1', dcb: '07168' },
+// ═══ CONSTANTES ═══
+const SUB=[
+  {n:'Gabapentina',l:'C1',d:'04369'},{n:'Fluoxetina',l:'C1',d:'03094'},
+  {n:'Amitriptilina',l:'C1',d:'00423'},{n:'Selegilina',l:'C1',d:'07929'},
+  {n:'Tramadol',l:'A2',d:'08806'},{n:'Codeína',l:'A2',d:'01706'},
+  {n:'Ribavirina',l:'C1',d:'07168'},
 ];
-const MESES = ['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
-const LS_HIST    = 'controlados_fa_v2';
-const LS_CPF     = 'controlados_cpfs';
-const LS_ENDER   = 'controlados_enderecos';
-const LS_PRESC   = 'controlados_prescritores';
-const LS_MOV     = 'controlados_movimentos';
-const LS_BACKUP  = 'controlados_ultimo_backup';
+const MES=['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
+const K={h:'controlados_fa_v2',c:'controlados_cpfs',e:'controlados_enderecos',
+  p:'controlados_prescritores',m:'controlados_movimentos',b:'controlados_ultimo_backup'};
 
-// ══════════ ESTADO ══════════
+// ═══ ESTADO TRANSITÓRIO (só durante importação) ═══
+let rawMov=null,rawCE=null,dadosRev=[];
 
-let dadosMov = null, dadosCE = null, dadosCruzados = [], xlsxBlob = null, ultimoEstoquesFinal = {};
+// ═══ HELPERS ═══
+const ar=n=>Math.round((n||0)*10000)/10000;
+const up=s=>String(s||'').toUpperCase().replace(/\s+/g,' ').trim();
+const nn=s=>up(s);
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+const esc=s=>String(s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+function fmtD(d){if(!d)return'';if(typeof d==='string'){const x=new Date(d);if(!isNaN(x))d=x;else return d;}return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();}
+function fmtDiso(d){if(!d)return'';return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function parseBR(s){if(!s)return null;const p=String(s).split('/');if(p.length!==3)return null;const y=parseInt(p[2])<100?2000+parseInt(p[2]):parseInt(p[2]);return new Date(y,parseInt(p[1])-1,parseInt(p[0]));}
+function fmtCPF(v){const d=v.replace(/\D/g,'').slice(0,11);if(d.length<=3)return d;if(d.length<=6)return d.slice(0,3)+'.'+d.slice(3);if(d.length<=9)return d.slice(0,3)+'.'+d.slice(3,6)+'.'+d.slice(6);return d.slice(0,3)+'.'+d.slice(3,6)+'.'+d.slice(6,9)+'-'+d.slice(9);}
+function autoPer(datas){if(!datas.length)return'';const mn=new Date(Math.min(...datas)),mx=new Date(Math.max(...datas));const a=MES[mn.getMonth()],b=MES[mx.getMonth()];return a===b?a+'/'+mx.getFullYear():a+'-'+b+'/'+mx.getFullYear();}
+function idSub(nome){if(!nome)return null;const u=nome.toUpperCase();for(const s of SUB)if(u.includes(s.n.toUpperCase())||nome.includes(s.d))return s.n;return null;}
+function setP(p,t){document.getElementById('pw').classList.add('v');document.getElementById('pb').style.width=p+'%';document.getElementById('ptx').textContent=t;}
+function lg(m,t){const b=document.getElementById('lb');b.classList.add('v');const l=document.createElement('div');if(t)l.className='l'+t[0];l.textContent=m;b.appendChild(l);b.scrollTop=b.scrollHeight;}
+function chkRdy(){document.getElementById('btn-proc').disabled=!(rawMov&&rawCE);}
 
-// ══════════ HELPERS ══════════
-
-function arred(n){ return Math.round((n||0)*10000)/10000; }
-function fmtData(d){
-  if(!d) return '';
-  if(typeof d==='string'){ const dt=new Date(d); if(!isNaN(dt)) d=dt; else return d; }
-  return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();
-}
-function fmtDataISO(d){ if(!d) return ''; return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
-function parseDataBR(s){
-  if(!s) return null;
-  const p=String(s).split('/'); if(p.length!==3) return null;
-  const y=parseInt(p[2])<100?2000+parseInt(p[2]):parseInt(p[2]);
-  return new Date(y, parseInt(p[1])-1, parseInt(p[0]));
-}
-function upper(s){ return String(s||'').toUpperCase().replace(/\s+/g,' ').trim(); }
-function normNome(s){ return upper(s); }
-function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
-function esc(s){ return String(s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
-function setProgress(p,t){ document.getElementById('progress-wrap').classList.add('visible'); document.getElementById('progress-bar').style.width=p+'%'; document.getElementById('progress-text').textContent=t; }
-function log(m,t){ const b=document.getElementById('log-box'); b.classList.add('visible'); const l=document.createElement('div'); if(t)l.className='log-'+t; l.textContent=m; b.appendChild(l); b.scrollTop=b.scrollHeight; }
-function checkReady(){ document.getElementById('btn-processar').disabled=!(dadosMov&&dadosCE); }
-function formatCPF(v){ const d=v.replace(/\D/g,'').slice(0,11); if(d.length<=3)return d; if(d.length<=6)return d.slice(0,3)+'.'+d.slice(3); if(d.length<=9)return d.slice(0,3)+'.'+d.slice(3,6)+'.'+d.slice(6); return d.slice(0,3)+'.'+d.slice(3,6)+'.'+d.slice(6,9)+'-'+d.slice(9); }
-
-function gerarPeriodoLabel(datas){
-  if(!datas.length) return '';
-  const min=new Date(Math.min(...datas)), max=new Date(Math.max(...datas));
-  const mi=MESES[min.getMonth()], mf=MESES[max.getMonth()], a=max.getFullYear();
-  return mi===mf ? mi+'/'+a : mi+'-'+mf+'/'+a;
-}
-
-function identificarSubstancia(nomeFF){
-  if(!nomeFF) return null;
-  const u=nomeFF.toUpperCase();
-  for(const s of SUBSTANCIAS){ if(u.includes(s.nome.toUpperCase())||nomeFF.includes(s.dcb)) return s.nome; }
-  return null;
-}
-
-// ══════════ LOCALSTORAGE — GENÉRICO ══════════
-
-function lsLoad(k,def){ try{ return JSON.parse(localStorage.getItem(k))||def; }catch(e){ return def; } }
-function lsSave(k,v){ localStorage.setItem(k,JSON.stringify(v)); }
+// ═══ LOCALSTORAGE ═══
+const ls=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))||d;}catch(e){return d;}};
+const sv=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
 
 // Histórico
-function loadHistorico(){ return lsLoad(LS_HIST,[]); }
-function saveHistorico(h){ lsSave(LS_HIST,h); }
-function ultimoEstoqueFinal(n){ const h=loadHistorico(); for(let i=h.length-1;i>=0;i--){ if(h[i].estoquesFinal&&h[i].estoquesFinal[n]!==undefined) return h[i].estoquesFinal[n]; } return 0; }
-
+const ldH=()=>ls(K.h,[]);const svH=h=>sv(K.h,h);
 // CPF
-function loadCPFs(){ return lsLoad(LS_CPF,{}); }
-function saveCPFs(c){ lsSave(LS_CPF,c); }
-function getCPF(nome){ return loadCPFs()[normNome(nome)]||''; }
-function setCPF(nome,cpf){ if(!nome) return; const c=loadCPFs(); const k=normNome(nome); if(cpf&&cpf.trim()) c[k]=cpf.trim(); else delete c[k]; saveCPFs(c); }
-
+const ldC=()=>ls(K.c,{});const svC=c=>sv(K.c,c);
+const getC=n=>ldC()[nn(n)]||'';
+function setC(n,v){if(!n)return;const c=ldC();if(v&&v.trim())c[nn(n)]=v.trim();else delete c[nn(n)];svC(c);}
 // Endereço
-function loadEnderecos(){ return lsLoad(LS_ENDER,{}); }
-function saveEnderecos(e){ lsSave(LS_ENDER,e); }
-function getEndereco(nome){ return loadEnderecos()[normNome(nome)]||''; }
-function setEndereco(nome,end){ if(!nome) return; const e=loadEnderecos(); const k=normNome(nome); if(end&&end.trim()) e[k]=upper(end); else delete e[k]; saveEnderecos(e); }
-
-// Prescritor
-function loadPrescritores(){ return lsLoad(LS_PRESC,{}); }
-function savePrescritores(p){ lsSave(LS_PRESC,p); }
-function getPrescritor(nome){ return loadPrescritores()[normNome(nome)]||{}; }
-function setPrescritor(nome,crmv){ if(!nome) return; const p=loadPrescritores(); p[normNome(nome)]={crmv:String(crmv||'').trim()}; savePrescritores(p); }
-
+const ldE=()=>ls(K.e,{});const svE=e=>sv(K.e,e);
+const getE=n=>ldE()[nn(n)]||'';
+function setE(n,v){if(!n)return;const e=ldE();if(v&&v.trim())e[nn(n)]=up(v);else delete e[nn(n)];svE(e);}
+// Prescritor {crmv,uf}
+const ldP=()=>ls(K.p,{});const svP=p=>sv(K.p,p);
+const getP=n=>ldP()[nn(n)]||{};
+function setP2(n,crmv,uf){if(!n)return;const p=ldP();p[nn(n)]={crmv:String(crmv||'').trim(),uf:up(uf)||'GO'};svP(p);}
 // Movimentos
-function loadMovimentos(){ return lsLoad(LS_MOV,{}); }
-function saveMovimentos(m){ lsSave(LS_MOV,m); }
-function getSubstMovimentos(n){ const a=loadMovimentos(); if(!a[n]) a[n]={estoqueInicial:0,lancamentos:[]}; return a[n]; }
-function recalcularSaldos(n){ const a=loadMovimentos(); const s=a[n]; if(!s) return 0; s.lancamentos.sort((x,y)=>(x.data||'').localeCompare(y.data||'')); let saldo=s.estoqueInicial||0; for(const l of s.lancamentos){ if(l.tipo==='entrada') saldo=arred(saldo+l.qtd); else saldo=arred(saldo-l.qtd); l.saldoApos=saldo; } saveMovimentos(a); return saldo; }
-function adicionarLancamento(n,l){ const a=loadMovimentos(); if(!a[n]) a[n]={estoqueInicial:0,lancamentos:[]}; a[n].lancamentos.push(l); saveMovimentos(a); recalcularSaldos(n); }
-function removerLancamento(n,id){ const a=loadMovimentos(); if(!a[n]) return; a[n].lancamentos=a[n].lancamentos.filter(l=>l.id!==id); saveMovimentos(a); recalcularSaldos(n); }
-function setEstoqueInicialMov(n,v){ const a=loadMovimentos(); if(!a[n]) a[n]={estoqueInicial:0,lancamentos:[]}; a[n].estoqueInicial=v; saveMovimentos(a); recalcularSaldos(n); }
+const ldM=()=>ls(K.m,{});const svM=m=>sv(K.m,m);
+function getSM(n){const a=ldM();if(!a[n])a[n]={estoqueInicial:0,lancamentos:[]};return a[n];}
+function recalc(n){const a=ldM();const s=a[n];if(!s)return 0;s.lancamentos.sort((x,y)=>(x.data||'').localeCompare(y.data||''));let sd=s.estoqueInicial||0;for(const l of s.lancamentos){if(l.tipo==='entrada')sd=ar(sd+l.qtd);else sd=ar(sd-l.qtd);l.saldoApos=sd;}svM(a);return sd;}
+function addLanc(n,l){const a=ldM();if(!a[n])a[n]={estoqueInicial:0,lancamentos:[]};a[n].lancamentos.push(l);svM(a);recalc(n);}
+function rmLanc(n,id){const a=ldM();if(!a[n])return;a[n].lancamentos=a[n].lancamentos.filter(l=>l.id!==id);svM(a);recalc(n);}
+function setEI(n,v){const a=ldM();if(!a[n])a[n]={estoqueInicial:0,lancamentos:[]};a[n].estoqueInicial=v;svM(a);recalc(n);}
+function saldoFinal(n){const s=getSM(n);if(!s.lancamentos.length)return s.estoqueInicial;return s.lancamentos[s.lancamentos.length-1].saldoApos||s.estoqueInicial;}
+// Backup
+function markBkp(){localStorage.setItem(K.b,new Date().toISOString());}
+function chkBkp(){const l=localStorage.getItem(K.b);if(!l||Date.now()-new Date(l).getTime()>7*864e5)document.getElementById('bkp-rem').classList.add('v');}
 
-function importarSaidasParaMovimentos(dados){
-  const a=loadMovimentos();
-  for(const d of dados){
-    if(d.status!=='ATIVA') continue;
-    const n=identificarSubstancia(d.substancia); if(!n) continue;
-    if(!a[n]) a[n]={estoqueInicial:0,lancamentos:[]};
-    const ex=a[n].lancamentos.find(l=>l.nrOm===d.nrOm&&l.tipo==='saida');
-    if(ex){ ex.qtd=d.qtdG||0; ex.data=d.data?fmtDataISO(d.data):''; ex.descricao='OM '+d.nrOm+' / DOC '+d.nrDoc; }
-    else{ a[n].lancamentos.push({id:'imp_'+uid(),tipo:'saida',data:d.data?fmtDataISO(d.data):'',qtd:d.qtdG||0,descricao:'OM '+d.nrOm+' / DOC '+d.nrDoc,nrOm:d.nrOm,nrDoc:d.nrDoc,origem:'importado'}); }
-  }
-  saveMovimentos(a);
-  for(const n of Object.keys(a)) recalcularSaldos(n);
+// ═══ TABS ═══
+function swTab(id,btn){
+  document.querySelectorAll('.tp').forEach(p=>p.classList.remove('a'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('a'));
+  document.getElementById('tp-'+id).classList.add('a');
+  if(btn)btn.classList.add('a');
+  if(id==='mov')renderMov();
+  if(id==='hist')renderHist();
 }
 
-// Backup tracking
-function markBackup(){ localStorage.setItem(LS_BACKUP,new Date().toISOString()); }
-function checkBackupReminder(){
-  const last=localStorage.getItem(LS_BACKUP);
-  if(!last||Date.now()-new Date(last).getTime()>7*86400000) document.getElementById('backup-reminder').classList.add('visible');
-}
-function dismissReminder(){ document.getElementById('backup-reminder').classList.remove('visible'); }
-
-// ══════════ TABS ══════════
-
-function switchTab(id,btn){
-  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
-  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-  document.getElementById('tab-'+id).classList.add('active');
-  if(btn) btn.classList.add('active');
-  if(id==='historico') renderHistorico();
-  if(id==='movimentos') renderMovimentos();
-}
-
-// ══════════ ESTOQUE GRID ══════════
-
-function montarEstGrid(){
-  const g=document.getElementById('est-grid'); g.innerHTML='';
-  SUBSTANCIAS.forEach(s=>{
-    const u=ultimoEstoqueFinal(s.nome);
-    const d=document.createElement('div'); d.className='est-field';
-    d.innerHTML=`<div class="subst-name">${s.nome}</div><label>Lista ${s.lista} · DCB ${s.dcb}</label>
-      <input type="number" id="est-${s.nome}" value="${u}" step="0.0001" min="0" />
-      <div class="last-val">${u>0?'↑ anterior: '+u.toFixed(4)+' g':'Sem histórico'}</div>`;
-    g.appendChild(d);
-  });
-}
-function getEstoqueInicial(){ const e={}; SUBSTANCIAS.forEach(s=>{ const i=document.getElementById('est-'+s.nome); e[s.nome]=i?(parseFloat(i.value)||0):0; }); return e; }
-
-// ══════════ UPLOAD ══════════
-
-function setupDrop(zId,iId,fId,tipo){
-  const z=document.getElementById(zId),inp=document.getElementById(iId),fn=document.getElementById(fId);
-  inp.addEventListener('change',e=>{ if(e.target.files[0]) readXLS(e.target.files[0],tipo,fn,z); });
-  z.addEventListener('dragover',e=>{ e.preventDefault(); z.classList.add('drag-over'); });
-  z.addEventListener('dragleave',()=>z.classList.remove('drag-over'));
-  z.addEventListener('drop',e=>{ e.preventDefault(); z.classList.remove('drag-over'); if(e.dataTransfer.files[0]) readXLS(e.dataTransfer.files[0],tipo,fn,z); });
+// ═══ UPLOAD ═══
+function setupDZ(zid,fid,fnid,tipo){
+  const z=document.getElementById(zid),inp=document.getElementById(fid),fn=document.getElementById(fnid);
+  inp.addEventListener('change',e=>{if(e.target.files[0])readXLS(e.target.files[0],tipo,fn,z);});
+  z.addEventListener('dragover',e=>{e.preventDefault();z.classList.add('dov');});
+  z.addEventListener('dragleave',()=>z.classList.remove('dov'));
+  z.addEventListener('drop',e=>{e.preventDefault();z.classList.remove('dov');if(e.dataTransfer.files[0])readXLS(e.dataTransfer.files[0],tipo,fn,z);});
 }
 function readXLS(file,tipo,fn,z){
   const r=new FileReader();
-  r.onload=e=>{
-    try{
-      const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array',codepage:1252});
-      const raw=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:''});
-      if(tipo==='mov'){ dadosMov=raw; fn.textContent='✓ '+file.name; z.classList.add('ready'); log('MOVIMENTO: '+raw.length+' linhas','ok'); }
-      else{ dadosCE=raw; fn.textContent='✓ '+file.name; z.classList.add('ready'); log('CLIENTE_END: '+raw.length+' linhas','ok'); }
-      checkReady();
-    }catch(err){ log('Erro: '+err.message,'err'); }
-  };
+  r.onload=e=>{try{
+    const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array',codepage:1252});
+    const raw=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:''});
+    if(tipo==='m'){rawMov=raw;fn.textContent='✓ '+file.name;z.classList.add('rdy');lg('MOVIMENTO: '+raw.length+' linhas','ok');}
+    else{rawCE=raw;fn.textContent='✓ '+file.name;z.classList.add('rdy');lg('CLIENTE_END: '+raw.length+' linhas','ok');}
+    chkRdy();
+  }catch(err){lg('Erro: '+err.message,'err');}};
   r.readAsArrayBuffer(file);
 }
 
-// ══════════ EXTRAÇÃO ══════════
-
-function extrairMovimento(raw){
-  const recs=[]; let subst='',lista='';
-  function c(row,i){ if(!row) return ''; const v=row[i]; return(v!==undefined&&v!==null)?String(v).trim():''; }
-  function ln(v){ const n=parseFloat(String(v)); return(!isNaN(n)&&String(v).trim()===String(n))?String(Math.round(n)):String(v).trim(); }
+// ═══ EXTRAÇÃO ═══
+function extrMov(raw){
+  const recs=[];let sub='',lista='';
+  const c=(row,i)=>{if(!row)return'';const v=row[i];return(v!==undefined&&v!==null)?String(v).trim():'';};
+  const ln=v=>{const n=parseFloat(String(v));return(!isNaN(n)&&String(v).trim()===String(n))?String(Math.round(n)):String(v).trim();};
   for(let r=0;r<raw.length;r++){
     const row=raw[r];
-    if(String(row[6]||'').includes('Produto:')){ subst=c(row,8); lista=c(row,3); continue; }
+    if(String(row[6]||'').includes('Produto:')){sub=c(row,8);lista=c(row,3);continue;}
     if(c(row,4)==='O.M.'){
-      let dt=parseDataBR(c(row,0)); let qtdG=null;
-      try{ qtdG=parseFloat(String(row[17]).replace(',','.')); }catch(e){}
-      const crmvRaw=c(row,20), crmvNr=crmvRaw.replace(/CRMV\s+\w+:\s*/i,'').trim();
-      recs.push({substancia:subst,lista,data:dt,dataStr:c(row,0),tutor:c(row,7),
+      let dt=parseBR(c(row,0));let qtdG=null;
+      try{qtdG=parseFloat(String(row[17]).replace(',','.'));}catch(e){}
+      const crmvRaw=c(row,20),crmvNr=crmvRaw.replace(/CRMV\s+\w+:\s*/i,'').trim();
+      recs.push({substancia:sub,lista,data:dt,dataStr:c(row,0),tutor:c(row,7),
         nrOm:ln(row[11]),nrDoc:ln(row[12]),calculo:c(row,15),qtdG,crmvRaw,crmvNr,nrReceita:ln(row[25])});
     }
   }
   return recs;
 }
-
-function extrairClienteEnd(raw){
+function extrCE(raw){
   const dados={};
-  function c(r,i){ if(r<0||r>=raw.length) return ''; const v=raw[r][i]; return(v!==undefined&&v!==null)?String(v).trim():''; }
+  const c=(r,i)=>{if(r<0||r>=raw.length)return'';const v=raw[r][i];return(v!==undefined&&v!==null)?String(v).trim():'';};
   for(let r=0;r<raw.length;r++){
-    const st=c(r,12); if(st!=='Ativa'&&st!=='Cancelada') continue;
-    const nrRaw=c(r,36); let nr=nrRaw; const nrF=parseFloat(nrRaw); if(!isNaN(nrF)) nr=String(Math.round(nrF));
+    const st=c(r,12);if(st!=='Ativa'&&st!=='Cancelada')continue;
+    const nrRaw=c(r,36);let nr=nrRaw;const nrF=parseFloat(nrRaw);if(!isNaN(nrF))nr=String(Math.round(nrF));
     const cliente=(c(r,37)+' '+c(r+1,37)).trim();
-    const end1=c(r,52),end2=c(r+1,52);
-    const endereco=(end1+' '+end2).trim().replace(/(\d+)\.0\b/g,'$1');
+    const endereco=(c(r,52)+' '+c(r+1,52)).trim().replace(/(\d+)\.0\b/g,'$1');
     let prescritor='',crmvNr='',qtdeTexto='',formula='',doseMg='';
     for(let off=3;off<10;off++){
-      if(r+off>=raw.length) break;
+      if(r+off>=raw.length)break;
       if(c(r+off,0)==='Prescritor:'){
         const pr=r+off;
-        const p1=c(pr,11),p2=(c(pr+1,0)==='')?c(pr+1,11):'';
-        prescritor=(p1+' '+p2).trim();
-        const cv=c(pr,43),cvF=parseFloat(cv); crmvNr=!isNaN(cvF)?String(Math.round(cvF)):cv;
+        prescritor=(c(pr,11)+' '+((c(pr+1,0)==='')?c(pr+1,11):'')).trim();
+        const cv=c(pr,43),cvF=parseFloat(cv);crmvNr=!isNaN(cvF)?String(Math.round(cvF)):cv;
         qtdeTexto=c(pr,59);
-        const fr=pr+2;
-        if(fr<raw.length){ formula=c(fr,43); const dr=c(fr,64); const drF=parseFloat(dr); doseMg=!isNaN(drF)?drF:dr; }
+        if(pr+2<raw.length){formula=c(pr+2,43);const dr=c(pr+2,64);const drF=parseFloat(dr);doseMg=!isNaN(drF)?drF:dr;}
         break;
       }
     }
@@ -229,557 +137,375 @@ function extrairClienteEnd(raw){
   return dados;
 }
 
-// ══════════ CRUZAMENTO (MAIÚSCULAS + CADASTROS) ══════════
-
+// ═══ CRUZAMENTO ═══
 function cruzar(movs,ced){
   return movs.map(m=>{
     const ce=ced[m.nrOm]||{};
-    const tutor=upper(ce.cliente||m.tutor);
-    const prescritor=upper(ce.prescritor||'');
-    const crmv=String(ce.crmvNr||m.crmvNr||'').trim();
-    // Lookup cadastros
-    const cpf=getCPF(tutor);
-    const endCad=getEndereco(tutor);
-    const endereco=upper(ce.endereco)||endCad||'';
-    const prescCad=getPrescritor(prescritor);
-    const crmvFinal=crmv||prescCad.crmv||'';
-    return { ...m,
-      substancia:upper(m.substancia), lista:upper(m.lista),
-      clienteFull:tutor, endereco, cpf,
-      prescritor, crmvNrCE:crmvFinal, crmvNr:crmvFinal,
-      calculo:upper(m.calculo),
-      qtdeTexto:ce.qtdeTexto||'', doseMg:ce.doseMg||'',
-      status:upper(ce.status||'ATIVA'),
-      nrReceita:m.nrReceita, nrOm:m.nrOm, nrDoc:m.nrDoc,
-      _selected:false, _issues:[],
-    };
+    const tutor=up(ce.cliente||m.tutor);
+    const prescritor=up(ce.prescritor||'');
+    const crmvNr=String(ce.crmvNr||m.crmvNr||'').trim();
+    const cpf=getC(tutor);
+    const endereco=up(ce.endereco)||getE(tutor)||'';
+    const pCad=getP(prescritor);
+    const crmvFinal=crmvNr||pCad.crmv||'';
+    const uf=pCad.uf||'GO';
+    return{...m,substancia:up(m.substancia),lista:up(m.lista),clienteFull:tutor,endereco,cpf,
+      prescritor,crmvNr:crmvFinal,crmvUf:uf,calculo:up(m.calculo),
+      qtdeTexto:ce.qtdeTexto||'',doseMg:ce.doseMg||'',
+      status:up(ce.status||'ATIVA'),_sel:false,_issues:[]};
   });
 }
 
-// ══════════ VALIDAÇÃO ══════════
-
-function validarRegistros(dados){
-  let total=0;
-  const oms={};
+// ═══ VALIDAÇÃO ═══
+function validar(dados){
+  let tot=0;const oms={};
   dados.forEach(d=>{
-    d._issues=[];
-    if(d.status!=='ATIVA') return;
-    if(!d.cpf) d._issues.push('CPF');
-    if(!d.endereco) d._issues.push('Endereço');
-    if(!d.prescritor) d._issues.push('Prescritor');
-    if(!d.crmvNrCE) d._issues.push('CRMV');
-    if(!d.nrReceita) d._issues.push('Nº Receita');
-    if(!d.qtdG||d.qtdG===0) d._issues.push('Qtd zero');
-    const omKey=d.nrOm+'_'+d.substancia;
-    if(d.nrOm&&oms[omKey]) d._issues.push('OM duplicado');
-    oms[omKey]=true;
-    if(d._issues.length) total++;
-  });
-  return total;
+    d._issues=[];if(d.status!=='ATIVA')return;
+    if(!d.cpf)d._issues.push('CPF');
+    if(!d.endereco)d._issues.push('End');
+    if(!d.prescritor)d._issues.push('Presc');
+    if(!d.crmvNr)d._issues.push('CRMV');
+    if(!d.nrReceita)d._issues.push('Rec');
+    if(!d.qtdG)d._issues.push('Qtd');
+    const k=d.nrOm+'_'+d.substancia;
+    if(d.nrOm&&oms[k])d._issues.push('OM dup');
+    oms[k]=true;
+    if(d._issues.length)tot++;
+  });return tot;
 }
 
-function verificarEstoqueNegativo(estInicial,dados){
-  const alertas=[];
-  for(const s of SUBSTANCIAS){
-    const ds=dados.filter(d=>identificarSubstancia(d.substancia)===s.nome&&d.status==='ATIVA');
-    const totalSaida=arred(ds.reduce((a,d)=>a+(d.qtdG||0),0));
-    const fin=arred((estInicial[s.nome]||0)-totalSaida);
-    if(fin<0) alertas.push(`${s.nome}: saldo negativo (${fin.toFixed(4)} g). Verifique estoque inicial ou entradas faltantes.`);
-  }
-  return alertas;
-}
-
-// ══════════ PROCESSAR ══════════
-
-document.getElementById('btn-processar').addEventListener('click',async()=>{
-  document.getElementById('log-box').innerHTML='';
-  document.getElementById('result-card').classList.remove('visible');
-  document.getElementById('rev-wrap').classList.remove('visible');
-  xlsxBlob=null;
-
-  const btn=document.getElementById('btn-processar');
-  btn.disabled=true; btn.innerHTML='<div class="spinner"></div> Processando...';
+// ═══ BTN PROCESSAR ═══
+document.getElementById('btn-proc').addEventListener('click',async()=>{
+  document.getElementById('lb').innerHTML='';
+  document.getElementById('rev-wr').classList.remove('v');
+  const btn=document.getElementById('btn-proc');
+  btn.disabled=true;btn.innerHTML='<div class="spinner"></div> Processando...';
   await new Promise(r=>setTimeout(r,50));
-
   try{
-    setProgress(10,'Lendo MOVIMENTO.XLS...');
-    const movs=extrairMovimento(dadosMov);
-    log('Movimento: '+movs.length+' dispensações','ok');
-
-    setProgress(40,'Lendo CLIENTE_END.XLS...');
-    const ced=extrairClienteEnd(dadosCE);
-    log('Receituário: '+Object.keys(ced).length+' registros','ok');
-
-    setProgress(60,'Cruzando e padronizando...');
-    dadosCruzados=cruzar(movs,ced);
-
-    // Período automático
-    const datas=dadosCruzados.filter(d=>d.data).map(d=>d.data);
-    const periodoAuto=gerarPeriodoLabel(datas);
-    if(periodoAuto) document.getElementById('periodo-label').value=periodoAuto;
-
-    setProgress(75,'Validando...');
-    const nIssues=validarRegistros(dadosCruzados);
-    if(nIssues>0) log('⚠ '+nIssues+' registros com campos incompletos','warn');
-
-    // Verificar estoque negativo
-    const estInicial=getEstoqueInicial();
-    const estAlerts=verificarEstoqueNegativo(estInicial,dadosCruzados);
-    const stockEl=document.getElementById('stock-alert');
-    if(estAlerts.length){ stockEl.innerHTML='⚠ <strong>Estoque negativo detectado:</strong><br>'+estAlerts.join('<br>'); stockEl.style.display='block'; }
-    else stockEl.style.display='none';
-
-    // Validação alert
-    const valEl=document.getElementById('validation-alert');
-    if(nIssues>0){ valEl.innerHTML='⚠ <strong>'+nIssues+' registro(s)</strong> com campos incompletos (marcados em amarelo). Corrija antes de gerar.'; valEl.style.display='block'; }
-    else valEl.style.display='none';
-
-    // Popular filtro de substância
-    const substSet=[...new Set(dadosCruzados.map(d=>d.substancia))];
-    document.getElementById('filter-subst').innerHTML='<option value="">Todas substâncias</option>'+substSet.map(s=>'<option value="'+s+'">'+s+'</option>').join('');
-
-    setProgress(100,'Dados prontos para revisão');
-    log('Revise os dados abaixo e clique em Gerar Planilha Final.','ok');
-    renderRevisao();
-    document.getElementById('rev-wrap').classList.add('visible');
-    document.getElementById('rev-wrap').scrollIntoView({behavior:'smooth',block:'start'});
-  }catch(err){ log('ERRO: '+err.message,'err'); console.error(err); }
-  finally{
-    btn.disabled=false;
-    btn.innerHTML='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg> Processar Dados';
-    checkReady();
-  }
+    setP(10,'Lendo MOVIMENTO...');
+    const movs=extrMov(rawMov);lg('Movimento: '+movs.length+' dispensações','ok');
+    setP(40,'Lendo CLIENTE_END...');
+    const ced=extrCE(rawCE);lg('Receituário: '+Object.keys(ced).length+' registros','ok');
+    setP(60,'Cruzando...');
+    dadosRev=cruzar(movs,ced);
+    const datas=dadosRev.filter(d=>d.data).map(d=>d.data);
+    const perAuto=autoPer(datas);
+    if(perAuto)document.getElementById('inp-per').value=perAuto;
+    setP(75,'Validando...');
+    const nI=validar(dadosRev);
+    if(nI>0)lg('⚠ '+nI+' registros incompletos','warn');
+    // Alertas
+    const alV=document.getElementById('al-val');
+    if(nI>0){alV.innerHTML='⚠ <strong>'+nI+'</strong> registro(s) com campos incompletos (amarelo).';alV.style.display='block';}else alV.style.display='none';
+    // Filtro substâncias
+    const subs=[...new Set(dadosRev.map(d=>d.substancia))];
+    document.getElementById('flt-sub').innerHTML='<option value="">Todas</option>'+subs.map(s=>'<option value="'+s+'">'+s+'</option>').join('');
+    setP(100,'Pronto para revisão');
+    renderRev();
+    document.getElementById('rev-wr').classList.add('v');
+    document.getElementById('rev-wr').scrollIntoView({behavior:'smooth',block:'start'});
+  }catch(err){lg('ERRO: '+err.message,'err');console.error(err);}
+  finally{btn.disabled=false;btn.textContent='Processar Dados';chkRdy();}
 });
 
-// ══════════ TABELA DE REVISÃO ══════════
+// ═══ TABELA REVISÃO ═══
+function renderRev(){
+  const tbl=document.getElementById('rev-tbl');
+  const ft=document.getElementById('flt-txt').value.toUpperCase();
+  const fs=document.getElementById('flt-sub').value;
+  // CPF alert
+  const semCPF=dadosRev.filter(d=>d.status==='ATIVA'&&!d.cpf);
+  const alC=document.getElementById('al-cpf');
+  if(semCPF.length>0){alC.innerHTML='⚠ '+[...new Set(semCPF.map(d=>d.clienteFull))].length+' tutor(es) sem CPF.';alC.style.display='block';}else alC.style.display='none';
 
-function renderRevisao(){
-  const table=document.getElementById('rev-table');
-  const semCPF=dadosCruzados.filter(d=>d.status==='ATIVA'&&!d.cpf);
-  const alertEl=document.getElementById('cpf-alert');
-  if(semCPF.length>0){
-    const nomes=[...new Set(semCPF.map(d=>d.clienteFull))];
-    alertEl.innerHTML='⚠ <strong>'+nomes.length+' tutor(es)</strong> sem CPF ('+semCPF.length+' dispensações).';
-    alertEl.style.display='block';
-  } else alertEl.style.display='none';
-
-  let html='<thead><tr>'+
-    '<th style="width:30px"><input type="checkbox" id="rev-check-all" onchange="toggleSelectAll(this.checked)" /></th>'+
-    '<th>#</th><th>Substância</th><th>Data</th><th>OM</th><th>Doc</th>'+
-    '<th style="min-width:130px">Tutor</th><th style="min-width:110px">CPF</th>'+
-    '<th style="min-width:160px">Endereço</th><th style="min-width:120px">Prescritor</th>'+
-    '<th>CRMV</th><th style="min-width:100px">Concentração</th><th>Qtd(g)</th>'+
-    '<th>Receita</th><th>Status</th><th style="width:20px"></th>'+
-  '</tr></thead><tbody>';
-
-  const ft=document.getElementById('filter-text').value.toUpperCase();
-  const fs=document.getElementById('filter-subst').value;
-
-  dadosCruzados.forEach((d,i)=>{
-    // Filtro
-    if(fs&&d.substancia!==fs) return;
-    if(ft&&!d.clienteFull.includes(ft)&&!d.prescritor.includes(ft)&&!d.nrOm.includes(ft)&&!(d.substancia||'').includes(ft)) return;
-
-    const hasIssue=d._issues&&d._issues.length>0&&d.status==='ATIVA';
-    const cls=d.status==='CANCELADA'?' class="row-cancelada"':(hasIssue?' class="row-warn"':'');
-    const cpfCls=(d.status==='ATIVA'&&!d.cpf)?'cpf-missing':(d.cpf?'cpf-ok':'');
-    const chk=d._selected?' checked':'';
-    const issueHtml=hasIssue?'<div class="rev-issues">⚠ '+d._issues.join(', ')+'</div>':'';
-    html+='<tr'+cls+'>'+
-      '<td><input type="checkbox" data-i="'+i+'" onchange="toggleSelect(this)"'+chk+' /></td>'+
-      '<td>'+(i+1)+'</td>'+
-      '<td>'+d.substancia+'</td>'+
-      '<td>'+(d.data?fmtData(d.data):d.dataStr)+'</td>'+
-      '<td>'+d.nrOm+'</td><td>'+d.nrDoc+'</td>'+
-      '<td><input value="'+esc(d.clienteFull)+'" data-i="'+i+'" data-f="clienteFull" onchange="revEdit(this)" /></td>'+
-      '<td><input value="'+esc(d.cpf)+'" data-i="'+i+'" data-f="cpf" class="'+cpfCls+'" oninput="this.value=formatCPF(this.value)" onchange="revEditCPF(this)" placeholder="000.000.000-00" /></td>'+
-      '<td><input value="'+esc(d.endereco)+'" data-i="'+i+'" data-f="endereco" onchange="revEditEndereco(this)" /></td>'+
-      '<td><input value="'+esc(d.prescritor)+'" data-i="'+i+'" data-f="prescritor" onchange="revEditPrescritor(this)" /></td>'+
-      '<td><input value="'+esc(d.crmvNrCE)+'" data-i="'+i+'" data-f="crmvNrCE" onchange="revEditCRMV(this)" style="width:70px" /></td>'+
-      '<td><input value="'+esc(d.calculo)+'" data-i="'+i+'" data-f="calculo" onchange="revEdit(this)" /></td>'+
-      '<td><input type="number" value="'+(d.qtdG||'')+'" data-i="'+i+'" data-f="qtdG" onchange="revEdit(this)" step="0.0001" style="width:70px" /></td>'+
-      '<td><input value="'+esc(d.nrReceita)+'" data-i="'+i+'" data-f="nrReceita" onchange="revEdit(this)" style="width:80px" /></td>'+
-      '<td><select data-i="'+i+'" data-f="status" onchange="revEdit(this)"><option value="ATIVA"'+(d.status==='ATIVA'?' selected':'')+'>Ativa</option><option value="CANCELADA"'+(d.status==='CANCELADA'?' selected':'')+'>Cancelada</option></select></td>'+
-      '<td>'+issueHtml+'</td>'+
-    '</tr>';
+  let h='<thead><tr><th style="width:28px"><input type="checkbox" onchange="selAll(this.checked)"/></th><th>#</th><th>Substância</th><th>Data</th><th>OM</th><th>Doc</th><th style="min-width:120px">Tutor</th><th style="min-width:100px">CPF</th><th style="min-width:140px">Endereço</th><th style="min-width:110px">Prescritor</th><th>CRMV</th><th>UF</th><th style="min-width:90px">Concentração</th><th>Qtd(g)</th><th>Receita</th><th>St</th><th></th></tr></thead><tbody>';
+  let vis=0;
+  dadosRev.forEach((d,i)=>{
+    if(fs&&d.substancia!==fs)return;
+    if(ft&&!d.clienteFull.includes(ft)&&!d.prescritor.includes(ft)&&!d.nrOm.includes(ft)&&!d.substancia.includes(ft))return;
+    vis++;
+    const warn=d._issues&&d._issues.length&&d.status==='ATIVA';
+    const cls=d.status==='CANCELADA'?' class="rw-c"':(warn?' class="rw-w"':'');
+    const chk=d._sel?' checked':'';
+    h+='<tr'+cls+'><td><input type="checkbox" data-i="'+i+'"'+chk+' onchange="tglSel(this)"/></td><td>'+(i+1)+'</td><td>'+d.substancia+'</td><td>'+(d.data?fmtD(d.data):d.dataStr)+'</td><td>'+d.nrOm+'</td><td>'+d.nrDoc+'</td>';
+    h+='<td><input value="'+esc(d.clienteFull)+'" data-i="'+i+'" data-f="clienteFull" onchange="rEd(this)"/></td>';
+    h+='<td><input value="'+esc(d.cpf)+'" data-i="'+i+'" data-f="cpf" oninput="this.value=fmtCPF(this.value)" onchange="rEdCPF(this)" placeholder="000.000.000-00"/></td>';
+    h+='<td><input value="'+esc(d.endereco)+'" data-i="'+i+'" data-f="endereco" onchange="rEdEnd(this)"/></td>';
+    h+='<td><input value="'+esc(d.prescritor)+'" data-i="'+i+'" data-f="prescritor" onchange="rEdPresc(this)"/></td>';
+    h+='<td><input value="'+esc(d.crmvNr)+'" data-i="'+i+'" data-f="crmvNr" onchange="rEdCRMV(this)" style="width:60px"/></td>';
+    h+='<td><input value="'+esc(d.crmvUf)+'" data-i="'+i+'" data-f="crmvUf" onchange="rEd(this)" style="width:35px" maxlength="2"/></td>';
+    h+='<td><input value="'+esc(d.calculo)+'" data-i="'+i+'" data-f="calculo" onchange="rEd(this)"/></td>';
+    h+='<td><input type="number" value="'+(d.qtdG||'')+'" data-i="'+i+'" data-f="qtdG" onchange="rEd(this)" step="0.0001" style="width:65px"/></td>';
+    h+='<td><input value="'+esc(d.nrReceita)+'" data-i="'+i+'" data-f="nrReceita" onchange="rEd(this)" style="width:70px"/></td>';
+    h+='<td><select data-i="'+i+'" data-f="status" onchange="rEd(this)"><option value="ATIVA"'+(d.status==='ATIVA'?' selected':'')+'>A</option><option value="CANCELADA"'+(d.status==='CANCELADA'?' selected':'')+'>C</option></select></td>';
+    h+='<td>'+(warn?'<div class="ri">⚠ '+d._issues.join(',')+'</div>':'')+'</td></tr>';
   });
-  html+='</tbody>';
-  table.innerHTML=html;
-  updateSelCount();
-  const vis=dadosCruzados.filter(d=>{ if(fs&&d.substancia!==fs) return false; if(ft&&!d.clienteFull.includes(ft)&&!d.prescritor.includes(ft)&&!d.nrOm.includes(ft)&&!(d.substancia||'').includes(ft)) return false; return true; });
-  document.getElementById('rev-count').textContent=vis.length+' visíveis · '+dadosCruzados.filter(d=>d.status==='ATIVA').length+' ativos de '+dadosCruzados.length;
+  h+='</tbody>';tbl.innerHTML=h;
+  updSelCnt();
+  document.getElementById('rev-cnt').textContent=vis+' visíveis · '+dadosRev.filter(d=>d.status==='ATIVA').length+' ativos';
 }
 
-function filtrarRevisao(){ renderRevisao(); }
+function rEd(el){const i=+el.dataset.i,f=el.dataset.f;if(f==='qtdG')dadosRev[i][f]=parseFloat(el.value)||0;else dadosRev[i][f]=up(el.value);}
+function rEdCPF(el){const i=+el.dataset.i,v=el.value;dadosRev[i].cpf=v;setC(dadosRev[i].clienteFull,v);const k=nn(dadosRev[i].clienteFull);dadosRev.forEach((d,j)=>{if(j!==i&&nn(d.clienteFull)===k)d.cpf=v;});renderRev();}
+function rEdEnd(el){const i=+el.dataset.i,v=up(el.value);dadosRev[i].endereco=v;setE(dadosRev[i].clienteFull,v);const k=nn(dadosRev[i].clienteFull);dadosRev.forEach((d,j)=>{if(j!==i&&nn(d.clienteFull)===k)d.endereco=v;});}
+function rEdPresc(el){const i=+el.dataset.i,v=up(el.value);dadosRev[i].prescritor=v;const c=getP(v);if(c.crmv){dadosRev[i].crmvNr=c.crmv;dadosRev[i].crmvUf=c.uf||'GO';renderRev();}}
+function rEdCRMV(el){const i=+el.dataset.i,v=el.value.trim();dadosRev[i].crmvNr=v;if(dadosRev[i].prescritor&&v)setP2(dadosRev[i].prescritor,v,dadosRev[i].crmvUf);}
+function tglSel(el){dadosRev[+el.dataset.i]._sel=el.checked;updSelCnt();}
+function selAll(c){dadosRev.forEach(d=>{d._sel=c;});document.querySelectorAll('#rev-tbl input[type="checkbox"]').forEach(cb=>{cb.checked=c;});updSelCnt();}
+function updSelCnt(){const n=dadosRev.filter(d=>d._sel).length;const el=document.getElementById('sel-cnt');if(el)el.textContent=n?n+' selecionado(s)':'';}
 
-function revEdit(el){ const i=+el.dataset.i,f=el.dataset.f; if(f==='qtdG') dadosCruzados[i][f]=parseFloat(el.value)||0; else dadosCruzados[i][f]=upper(el.value); }
-
-function revEditCPF(el){
-  const i=+el.dataset.i, cpf=el.value; dadosCruzados[i].cpf=cpf;
-  setCPF(dadosCruzados[i].clienteFull,cpf);
-  const k=normNome(dadosCruzados[i].clienteFull);
-  dadosCruzados.forEach((d,j)=>{ if(j!==i&&normNome(d.clienteFull)===k) d.cpf=cpf; });
-  renderRevisao();
-}
-
-function revEditEndereco(el){
-  const i=+el.dataset.i, end=upper(el.value); dadosCruzados[i].endereco=end;
-  setEndereco(dadosCruzados[i].clienteFull,end);
-  const k=normNome(dadosCruzados[i].clienteFull);
-  dadosCruzados.forEach((d,j)=>{ if(j!==i&&normNome(d.clienteFull)===k) d.endereco=end; });
-}
-
-function revEditPrescritor(el){
-  const i=+el.dataset.i, nome=upper(el.value); dadosCruzados[i].prescritor=nome;
-  // Se já temos CRMV cadastrado para esse prescritor, preencher
-  const cad=getPrescritor(nome);
-  if(cad.crmv){ dadosCruzados[i].crmvNrCE=cad.crmv; renderRevisao(); }
-}
-
-function revEditCRMV(el){
-  const i=+el.dataset.i, crmv=el.value.trim(); dadosCruzados[i].crmvNrCE=crmv;
-  if(dadosCruzados[i].prescritor&&crmv) setPrescritor(dadosCruzados[i].prescritor,crmv);
-}
-
-// Seleção
-function toggleSelect(el){ dadosCruzados[+el.dataset.i]._selected=el.checked; updateSelCount(); }
-function toggleSelectAll(chk){ dadosCruzados.forEach(d=>{d._selected=chk;}); document.querySelectorAll('#rev-table input[type="checkbox"]').forEach(cb=>{cb.checked=chk;}); updateSelCount(); }
-function updateSelCount(){ const n=dadosCruzados.filter(d=>d._selected).length; const el=document.getElementById('sel-count'); if(el) el.textContent=n>0?n+' selecionado(s)':''; }
-function getSelectedDados(src){
-  const d=src||dadosCruzados;
-  const sel=d.filter(x=>x._selected&&x.status==='ATIVA');
-  return sel.length>0?sel:d.filter(x=>x.status==='ATIVA');
-}
-
-// ══════════ MODAIS ══════════
-
-function abrirCPFModal(){
-  const cpfs=loadCPFs(); const entries=Object.entries(cpfs).sort((a,b)=>a[0].localeCompare(b[0]));
-  const el=document.getElementById('cpf-lista');
-  if(!entries.length){ el.innerHTML='<p style="color:var(--muted);font-family:var(--mono);font-size:.75rem">Nenhum CPF cadastrado.</p>'; }
-  else{
-    let h='<table style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size:.72rem"><tr><th style="text-align:left;padding:6px;border-bottom:1px solid var(--border);color:var(--accent);font-size:.62rem">TUTOR</th><th style="text-align:left;padding:6px;border-bottom:1px solid var(--border);color:var(--accent);font-size:.62rem">CPF</th><th style="width:30px"></th></tr>';
-    entries.forEach(([n,c])=>{
-      const sn=n.replace(/'/g,"\\'"); h+='<tr><td style="padding:4px 6px;border-bottom:1px solid var(--border)">'+esc(n)+'</td><td style="padding:4px 6px;border-bottom:1px solid var(--border)"><input value="'+esc(c)+'" style="background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:var(--mono);font-size:.72rem;padding:2px 6px;width:130px" oninput="this.value=formatCPF(this.value)" onchange="setCPF(\''+sn+'\',this.value)" /></td><td><button class="btn-danger" style="font-size:.6rem;padding:2px 6px" onclick="setCPF(\''+sn+'\',\'\');this.closest(\'tr\').remove()">✕</button></td></tr>';
-    });
-    h+='</table>'; el.innerHTML=h;
-  }
-  document.getElementById('cpf-modal').classList.add('active');
-}
-function fecharCPFModal(){ document.getElementById('cpf-modal').classList.remove('active'); if(document.getElementById('rev-wrap').classList.contains('visible')){ const c=loadCPFs(); dadosCruzados.forEach(d=>{d.cpf=c[normNome(d.clienteFull)]||d.cpf||'';}); renderRevisao(); } }
-
-function abrirPrescritorModal(){
-  const presc=loadPrescritores(); const entries=Object.entries(presc).sort((a,b)=>a[0].localeCompare(b[0]));
-  const el=document.getElementById('prescritor-lista');
-  if(!entries.length){ el.innerHTML='<p style="color:var(--muted);font-family:var(--mono);font-size:.75rem">Nenhum prescritor cadastrado.</p>'; }
-  else{
-    let h='<table style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size:.72rem"><tr><th style="text-align:left;padding:6px;border-bottom:1px solid var(--border);color:var(--accent);font-size:.62rem">PRESCRITOR</th><th style="text-align:left;padding:6px;border-bottom:1px solid var(--border);color:var(--accent);font-size:.62rem">CRMV</th><th style="width:30px"></th></tr>';
-    entries.forEach(([n,v])=>{
-      const sn=n.replace(/'/g,"\\'"); h+='<tr><td style="padding:4px 6px;border-bottom:1px solid var(--border)">'+esc(n)+'</td><td style="padding:4px 6px;border-bottom:1px solid var(--border)"><input value="'+esc(v.crmv||'')+'" style="background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:var(--mono);font-size:.72rem;padding:2px 6px;width:100px" onchange="setPrescritor(\''+sn+'\',this.value)" /></td><td><button class="btn-danger" style="font-size:.6rem;padding:2px 6px" onclick="const p=loadPrescritores();delete p[\''+sn+'\'];savePrescritores(p);this.closest(\'tr\').remove()">✕</button></td></tr>';
-    });
-    h+='</table>'; el.innerHTML=h;
-  }
-  document.getElementById('prescritor-modal').classList.add('active');
-}
-function fecharPrescritorModal(){ document.getElementById('prescritor-modal').classList.remove('active'); }
-
-function limparCadastro(tipo){
-  if(!confirm('Limpar todo o cadastro de '+(tipo==='cpf'?'CPFs':'Prescritores')+'?')) return;
-  if(tipo==='cpf'){ saveCPFs({}); abrirCPFModal(); }
-  else{ savePrescritores({}); abrirPrescritorModal(); }
-}
-
-document.getElementById('cpf-modal').addEventListener('click',function(e){ if(e.target===this) fecharCPFModal(); });
-document.getElementById('prescritor-modal').addEventListener('click',function(e){ if(e.target===this) fecharPrescritorModal(); });
-
-// ══════════ GERAR PLANILHA ══════════
-
-document.getElementById('btn-gerar').addEventListener('click',async()=>{
-  if(!dadosCruzados.length) return;
-  const nomeEstab=upper(document.getElementById('estabelecimento').value)||'R S O MANIPULAÇÃO ANIMAL';
-  const periodoLabel=document.getElementById('periodo-label').value.trim();
-  const estInicial=getEstoqueInicial();
-
-  // Salvar endereços e prescritores dos dados editados
-  dadosCruzados.forEach(d=>{
-    if(d.status==='ATIVA'){
-      if(d.endereco) setEndereco(d.clienteFull,d.endereco);
-      if(d.prescritor&&d.crmvNrCE) setPrescritor(d.prescritor,d.crmvNrCE);
-    }
-  });
-
-  const btn=document.getElementById('btn-gerar');
-  btn.disabled=true; btn.innerHTML='<div class="spinner"></div> Gerando...';
+// ═══ CONFIRMAR IMPORTAÇÃO → MOVIMENTOS ═══
+document.getElementById('btn-confirm').addEventListener('click',async()=>{
+  if(!dadosRev.length)return;
+  const btn=document.getElementById('btn-confirm');
+  btn.disabled=true;btn.innerHTML='<div class="spinner"></div> Salvando...';
   await new Promise(r=>setTimeout(r,50));
-
   try{
-    setProgress(30,'Gerando Excel...');
-    const{blob,estoquesFinal}=gerarExcel(dadosCruzados,estInicial,nomeEstab,periodoLabel);
-    xlsxBlob=blob; ultimoEstoquesFinal=estoquesFinal;
-
-    setProgress(60,'Salvando histórico...');
-    salvarNoHistorico(dadosCruzados,estInicial,estoquesFinal,periodoLabel,nomeEstab);
-
-    setProgress(80,'Registrando movimentos...');
-    SUBSTANCIAS.forEach(s=>setEstoqueInicialMov(s.nome,estInicial[s.nome]||0));
-    importarSaidasParaMovimentos(dadosCruzados);
-    montarEstGrid();
-    setProgress(100,'Concluído!');
-
-    const ativas=dadosCruzados.filter(d=>d.status==='ATIVA');
-    const totalG=ativas.reduce((a,d)=>a+(d.qtdG||0),0);
-    document.getElementById('stats-grid').innerHTML=
-      [{n:dadosCruzados.length,l:'Dispensações'},{n:ativas.length,l:'Ativas'},{n:[...new Set(dadosCruzados.map(d=>d.substancia))].length,l:'Substâncias'},{n:arred(totalG)+' g',l:'Total saída'}]
-      .map(s=>'<div class="stat-box"><div class="stat-num">'+s.n+'</div><div class="stat-lbl">'+s.l+'</div></div>').join('');
-
-    document.getElementById('print-subst-select').innerHTML=SUBSTANCIAS.map(s=>'<option value="'+s.nome+'">'+s.nome+' ('+s.lista+')</option>').join('');
-    document.getElementById('result-card').classList.add('visible');
-    log('Planilha gerada, histórico e movimentos atualizados!','ok');
-    SUBSTANCIAS.forEach(s=>{ if(estoquesFinal[s.nome]!==undefined) log('  '+s.nome+': '+estoquesFinal[s.nome].toFixed(4)+' g','ok'); });
-  }catch(err){ log('ERRO: '+err.message,'err'); console.error(err); }
-  finally{ btn.disabled=false; btn.innerHTML='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 12l2 2 4-4"/><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z"/></svg> Gerar Planilha Final'; }
+    // Salvar cadastros
+    dadosRev.forEach(d=>{
+      if(d.status==='ATIVA'){
+        if(d.cpf)setC(d.clienteFull,d.cpf);
+        if(d.endereco)setE(d.clienteFull,d.endereco);
+        if(d.prescritor&&d.crmvNr)setP2(d.prescritor,d.crmvNr,d.crmvUf);
+      }
+    });
+    // Inserir saídas nos movimentos (deduplicar por nrOm+substância)
+    const all=ldM();
+    for(const d of dadosRev){
+      if(d.status!=='ATIVA')continue;
+      const sn=idSub(d.substancia);if(!sn)continue;
+      if(!all[sn])all[sn]={estoqueInicial:saldoFinal(sn),lancamentos:[]};
+      const ex=all[sn].lancamentos.find(l=>l.nrOm===d.nrOm&&l.tipo==='saida');
+      const rec={
+        tutor:d.clienteFull,cpf:d.cpf,endereco:d.endereco,
+        prescritor:d.prescritor,crmvNr:d.crmvNr,crmvUf:d.crmvUf,
+        calculo:d.calculo,doseMg:d.doseMg,nrReceita:d.nrReceita,
+        substancia:d.substancia,lista:d.lista,
+      };
+      if(ex){ex.qtd=d.qtdG||0;ex.data=d.data?fmtDiso(d.data):'';ex.descricao='OM '+d.nrOm+' / DOC '+d.nrDoc;Object.assign(ex,rec);}
+      else{all[sn].lancamentos.push({id:'imp_'+uid(),tipo:'saida',data:d.data?fmtDiso(d.data):'',qtd:d.qtdG||0,descricao:'OM '+d.nrOm+' / DOC '+d.nrDoc,nrOm:d.nrOm,nrDoc:d.nrDoc,origem:'importado',...rec});}
+    }
+    svM(all);
+    for(const n of Object.keys(all))recalc(n);
+    // Salvar no histórico
+    const per=document.getElementById('inp-per').value.trim();
+    const estab=up(document.getElementById('inp-estab').value)||'R S O MANIPULAÇÃO ANIMAL';
+    const datas=dadosRev.filter(d=>d.data).map(d=>d.data);
+    const hist=ldH();
+    const estFinal={};SUB.forEach(s=>{estFinal[s.n]=saldoFinal(s.n);});
+    const estIni={};SUB.forEach(s=>{estIni[s.n]=getSM(s.n).estoqueInicial;});
+    hist.push({id:Date.now(),geradoEm:new Date().toISOString(),periodoLabel:per,estabelecimento:estab,
+      dataInicio:datas.length?new Date(Math.min(...datas)).toISOString():null,
+      dataFim:datas.length?new Date(Math.max(...datas)).toISOString():null,
+      totalRegistros:dadosRev.length,
+      substanciasAtivas:[...new Set(dadosRev.filter(d=>d.status==='ATIVA').map(d=>d.substancia))],
+      estoquesInicial:estIni,estoquesFinal:estFinal});
+    svH(hist);
+    lg('✓ '+dadosRev.filter(d=>d.status==='ATIVA').length+' dispensações importadas para Movimentos!','ok');
+    dadosRev=[];
+    document.getElementById('rev-wr').classList.remove('v');
+    // Ir para aba Movimentos
+    swTab('mov',document.querySelectorAll('.tab')[1]);
+  }catch(err){lg('ERRO: '+err.message,'err');console.error(err);}
+  finally{btn.disabled=false;btn.textContent='✓ Confirmar Importação → Movimentos';}
 });
 
-// ══════════ GERAÇÃO EXCEL ══════════
-
-function gerarExcel(dados,estInicial,nomeEstab,periodoLabel){
-  const wb=XLSX.utils.book_new();
-  const titulo=periodoLabel;
-  const estoquesFinal={};
-
-  // RESUMO
-  const rr=[
-    ['RELATÓRIO DE MOVIMENTAÇÃO — CONTROLADOS VETERINÁRIOS — '+nomeEstab],
-    ['Período: '+titulo],[],
-    ['Substância','Lista','DCB','Est. Inicial (g)','Dispensações','Total Saída (g)','Est. Final (g)'],
-  ];
-  for(const s of SUBSTANCIAS){
-    const ds=dados.filter(d=>identificarSubstancia(d.substancia)===s.nome&&d.status==='ATIVA');
-    const ts=arred(ds.reduce((a,d)=>a+(d.qtdG||0),0));
-    const ei=estInicial[s.nome]||0, ef=arred(ei-ts); estoquesFinal[s.nome]=ef;
-    rr.push([s.nome,s.lista,s.dcb,ei,ds.length,ts,ef]);
+// ═══ MODAIS CPF / PRESCRITOR ═══
+function openModal(tipo){
+  if(tipo==='cpf'){
+    const entries=Object.entries(ldC()).sort((a,b)=>a[0].localeCompare(b[0]));
+    const el=document.getElementById('cpf-list');
+    if(!entries.length){el.innerHTML='<p style="color:var(--mt);font-family:var(--mono);font-size:.72rem">Nenhum CPF.</p>';}
+    else{let h='<table style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size:.7rem">';
+      entries.forEach(([n,c])=>{const sn=n.replace(/'/g,"\\'");h+='<tr><td style="padding:3px 5px;border-bottom:1px solid var(--bd)">'+esc(n)+'</td><td style="padding:3px 5px;border-bottom:1px solid var(--bd)"><input value="'+esc(c)+'" oninput="this.value=fmtCPF(this.value)" onchange="setC(\''+sn+'\',this.value)" style="background:var(--bg);border:1px solid var(--bd);border-radius:3px;color:var(--tx);font-family:var(--mono);font-size:.7rem;padding:2px 5px;width:120px"/></td><td><button class="bd" style="font-size:.58rem;padding:2px 5px" onclick="setC(\''+sn+'\',\'\');this.closest(\'tr\').remove()">✕</button></td></tr>';});
+      h+='</table>';el.innerHTML=h;}
+    document.getElementById('mo-cpf').classList.add('a');
+  } else {
+    const entries=Object.entries(ldP()).sort((a,b)=>a[0].localeCompare(b[0]));
+    const el=document.getElementById('presc-list');
+    if(!entries.length){el.innerHTML='<p style="color:var(--mt);font-family:var(--mono);font-size:.72rem">Nenhum prescritor.</p>';}
+    else{let h='<table style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size:.7rem"><tr><th style="text-align:left;padding:4px;border-bottom:1px solid var(--bd);color:var(--ac);font-size:.6rem">PRESCRITOR</th><th style="padding:4px;border-bottom:1px solid var(--bd);color:var(--ac);font-size:.6rem">CRMV</th><th style="padding:4px;border-bottom:1px solid var(--bd);color:var(--ac);font-size:.6rem">UF</th><th></th></tr>';
+      entries.forEach(([n,v])=>{const sn=n.replace(/'/g,"\\'");h+='<tr><td style="padding:3px 5px;border-bottom:1px solid var(--bd)">'+esc(n)+'</td><td style="padding:3px 5px;border-bottom:1px solid var(--bd)"><input value="'+esc(v.crmv||'')+'" onchange="setP2(\''+sn+'\',this.value,this.parentElement.nextElementSibling.querySelector(\'input\').value)" style="background:var(--bg);border:1px solid var(--bd);border-radius:3px;color:var(--tx);font-family:var(--mono);font-size:.7rem;padding:2px 5px;width:80px"/></td><td style="padding:3px 5px;border-bottom:1px solid var(--bd)"><input value="'+esc(v.uf||'GO')+'" maxlength="2" onchange="setP2(\''+sn+'\',this.parentElement.previousElementSibling.querySelector(\'input\').value,this.value)" style="background:var(--bg);border:1px solid var(--bd);border-radius:3px;color:var(--tx);font-family:var(--mono);font-size:.7rem;padding:2px 5px;width:35px"/></td><td><button class="bd" style="font-size:.58rem;padding:2px 5px" onclick="const p=ldP();delete p[\''+sn+'\'];svP(p);this.closest(\'tr\').remove()">✕</button></td></tr>';});
+      h+='</table>';el.innerHTML=h;}
+    document.getElementById('mo-presc').classList.add('a');
   }
-  const wR=XLSX.utils.aoa_to_sheet(rr); wR['!cols']=[{wch:20},{wch:7},{wch:8},{wch:15},{wch:14},{wch:16},{wch:14}];
-  XLSX.utils.book_append_sheet(wb,wR,'RESUMO');
-
-  // CONTROLE
-  const cr=[['BASE DE DADOS — '+nomeEstab+' — '+titulo],[],
-    ['Nº OM','Nº DOC','Data','Tutor','CPF','Endereço','CRMV','Veterinário','Substância','Lista','Concentração','Dose','Qtde Texto','Qtd (g)','Nº Receita','Status'],
-    ...dados.map(d=>[d.nrOm,d.nrDoc,d.data?fmtData(d.data):d.dataStr,d.clienteFull,d.cpf||'',d.endereco,d.crmvNrCE,d.prescritor,d.substancia,d.lista,d.calculo,d.doseMg,d.qtdeTexto,d.qtdG,d.nrReceita,d.status])];
-  const wC=XLSX.utils.aoa_to_sheet(cr); wC['!cols']=[{wch:9},{wch:9},{wch:12},{wch:30},{wch:15},{wch:40},{wch:10},{wch:24},{wch:20},{wch:6},{wch:18},{wch:10},{wch:16},{wch:9},{wch:14},{wch:10}];
-  XLSX.utils.book_append_sheet(wb,wC,'CONTROLE');
-
-  // CORPO por substância
-  for(const s of SUBSTANCIAS){
-    const ds=dados.filter(d=>identificarSubstancia(d.substancia)===s.nome&&d.status==='ATIVA');
-    const ei=estInicial[s.nome]||0;
-    const movStore=getSubstMovimentos(s.nome);
-    const lancs=[];
-    ds.forEach(d=>lancs.push({tipo:'saida',data:d.data,qtd:d.qtdG||0,nrOm:d.nrOm,nrDoc:d.nrDoc,crmvRaw:d.crmvRaw,prescritor:d.prescritor,calculo:d.calculo,nrReceita:d.nrReceita}));
-    movStore.lancamentos.filter(l=>l.tipo==='entrada').forEach(l=>lancs.push({tipo:'entrada',data:l.data?new Date(l.data+'T12:00:00'):null,qtd:l.qtd,descricao:l.descricao}));
-    movStore.lancamentos.filter(l=>l.tipo==='perda').forEach(l=>lancs.push({tipo:'perda',data:l.data?new Date(l.data+'T12:00:00'):null,qtd:l.qtd,descricao:l.descricao}));
-    lancs.sort((a,b)=>{const da=a.data?(a.data instanceof Date?a.data.getTime():new Date(a.data).getTime()):0;const db=b.data?(b.data instanceof Date?b.data.getTime():new Date(b.data).getTime()):0;return da-db;});
-    const rows=[['LIVRO DE REGISTRO — SUBSTÂNCIAS SUJEITAS A CONTROLE ESPECIAL DE USO VETERINÁRIO'],['SUBSTÂNCIA (DCB): '+s.nome+' | Lista: '+s.lista+' | '+nomeEstab],['Período: '+titulo],[],
-      ['DATA','EST. INICIAL (g)','ENTRADA (g)','SAÍDA (g)','PERDAS (g)','EST. FINAL (g)','REG / NR DOC','OUTRAS INFORMAÇÕES'],
-      ['ESTOQUE INICIAL',ei,'','','',ei,'','Estoque inicial — '+titulo]];
-    let saldo=ei;
-    for(const l of lancs){
-      const dt=l.data instanceof Date?l.data:(l.data?new Date(l.data):null);
-      const ent=l.tipo==='entrada'?l.qtd:0,sai=l.tipo==='saida'?l.qtd:0,per=l.tipo==='perda'?l.qtd:0;
-      const ns=arred(saldo+ent-sai-per);
-      let info='';if(l.tipo==='saida') info=['Rec: '+l.nrReceita,l.prescritor,l.calculo].filter(Boolean).join(' | ');else if(l.tipo==='entrada') info='ENTRADA: '+(l.descricao||'');else info='PERDA: '+(l.descricao||'');
-      rows.push([dt?fmtData(dt):'',arred(saldo),ent||'',sai||'',per||'',ns,l.nrOm?l.nrOm+'/'+l.nrDoc:(l.tipo==='entrada'?'ENTRADA':'PERDA'),info]);
-      saldo=ns;
-    }
-    rows.push(['ESTOQUE FINAL','','','','',arred(saldo),'','Estoque final — transferir para próximo período']);
-    const w=XLSX.utils.aoa_to_sheet(rows);w['!cols']=[{wch:14},{wch:14},{wch:11},{wch:11},{wch:9},{wch:14},{wch:20},{wch:55}];
-    XLSX.utils.book_append_sheet(wb,w,'CORPO_'+s.nome.replace(/[^\w]/g,'_'));
-  }
-
-  // FICHAS
-  const fr=[['FICHAS DE DISPENSAÇÃO — '+nomeEstab+' — '+titulo],
-    ['Nº OM','Nº DOC','Data','Tutor','CPF','Endereço','Veterinário','CRMV','Substância','Concentração','Qtd (g)','Nº Receita','Status'],
-    ...dados.map(d=>[d.nrOm,d.nrDoc,d.data?fmtData(d.data):d.dataStr,d.clienteFull,d.cpf||'',d.endereco,d.prescritor,d.crmvNrCE,d.substancia,d.calculo,d.qtdG,d.nrReceita,d.status])];
-  const wF=XLSX.utils.aoa_to_sheet(fr);wF['!cols']=[{wch:9},{wch:9},{wch:12},{wch:28},{wch:15},{wch:38},{wch:22},{wch:10},{wch:20},{wch:16},{wch:9},{wch:14},{wch:10}];
-  XLSX.utils.book_append_sheet(wb,wF,'FICHAS_IMPRIMIR');
-
-  const out=XLSX.write(wb,{bookType:'xlsx',type:'array'});
-  return{blob:new Blob([out],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),estoquesFinal};
 }
+function closeModal(t){document.getElementById('mo-'+(t==='cpf'?'cpf':'presc')).classList.remove('a');}
+function clearCad(t){if(!confirm('Limpar todos?'))return;if(t==='cpf'){svC({});openModal('cpf');}else{svP({});openModal('presc');}}
+document.getElementById('mo-cpf').addEventListener('click',function(e){if(e.target===this)closeModal('cpf');});
+document.getElementById('mo-presc').addEventListener('click',function(e){if(e.target===this)closeModal('presc');});
 
-// ══════════ HISTÓRICO ══════════
-
-function salvarNoHistorico(dados,estInicial,estoquesFinal,periodoLabel,nomeEstab){
-  const h=loadHistorico();
-  const datas=dados.filter(d=>d.data).map(d=>d.data);
-  const registros=dados.map(d=>({...d,data:d.data instanceof Date?d.data.toISOString():d.data,_selected:undefined,_issues:undefined}));
-  h.push({id:Date.now(),geradoEm:new Date().toISOString(),periodoLabel,estabelecimento:nomeEstab,
-    dataInicio:datas.length?new Date(Math.min(...datas)).toISOString():null,
-    dataFim:datas.length?new Date(Math.max(...datas)).toISOString():null,
-    totalRegistros:dados.length,
-    substanciasAtivas:[...new Set(dados.filter(d=>d.status==='ATIVA').map(d=>d.substancia))],
-    estoquesInicial:estInicial,estoquesFinal,registros});
-  saveHistorico(h);
+// ═══ ABA MOVIMENTOS ═══
+let mvSel={};// {lancId:true}
+function renderMov(){
+  const sel=document.getElementById('mv-sub');
+  const cur=sel.value;
+  sel.innerHTML=SUB.map(s=>'<option value="'+s.n+'"'+(s.n===cur?' selected':'')+'>'+s.n+' ('+s.l+')</option>').join('');
+  renderMovList();
 }
+function renderMovList(){
+  const nm=document.getElementById('mv-sub').value;
+  recalc(nm);
+  const s=getSM(nm);
+  const te=s.lancamentos.filter(l=>l.tipo==='entrada').reduce((a,l)=>a+l.qtd,0);
+  const ts=s.lancamentos.filter(l=>l.tipo==='saida').reduce((a,l)=>a+l.qtd,0);
+  const tp=s.lancamentos.filter(l=>l.tipo==='perda').reduce((a,l)=>a+l.qtd,0);
+  const sf=saldoFinal(nm);
+  document.getElementById('mv-res').innerHTML=[
+    {n:ar(s.estoqueInicial)+' g',l:'Est. Inicial',c:''},
+    {n:ar(te)+' g',l:'Entradas',c:'var(--gn)'},
+    {n:ar(ts)+' g',l:'Saídas',c:'var(--ac)'},
+    {n:ar(tp)+' g',l:'Perdas',c:'var(--rd)'},
+    {n:ar(sf)+' g',l:'Saldo Final',c:sf<0?'var(--rd)':'var(--gn)'},
+  ].map(x=>'<div class="sbox"><div class="snum" style="font-size:1rem;'+(x.c?'color:'+x.c:'')+'">'+x.n+'</div><div class="slbl">'+x.l+'</div></div>').join('');
 
-function renderHistorico(){
-  const hist=loadHistorico(),lista=document.getElementById('hist-lista');
-  if(!hist.length){ lista.innerHTML='<div class="hist-empty">Nenhum registro gerado ainda.</div>'; return; }
-  lista.innerHTML='';
-  [...hist].reverse().forEach(reg=>{
-    const dt=new Date(reg.geradoEm);
-    const dtStr=dt.toLocaleDateString('pt-BR')+' '+dt.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
-    const div=document.createElement('div'); div.className='hist-entry';
-    const pills=SUBSTANCIAS.map(s=>{const f=reg.estoquesFinal?.[s.nome];if(f===undefined&&!reg.estoquesInicial?.[s.nome])return'';return '<span class="hist-pill">'+s.nome+' <span>'+(f!==undefined?f.toFixed(4)+'g':'—')+'</span></span>';}).join('');
-    const temReg=reg.registros&&reg.registros.length>0;
-    const substOpts=temReg?[...new Set(reg.registros.filter(r=>r.status==='ATIVA').map(r=>identificarSubstancia(r.substancia)).filter(Boolean))].map(n=>'<option value="'+n+'">'+n+'</option>').join(''):'';
-    div.innerHTML='<div class="hist-header"><div class="hist-periodo">'+(reg.periodoLabel||'Período')+'</div><div class="hist-date">'+dtStr+'</div></div>'+
-      '<div style="font-family:var(--mono);font-size:.72rem;color:var(--muted);margin-bottom:8px">'+reg.totalRegistros+' dispensações · '+reg.estabelecimento+'</div>'+
-      '<div style="font-family:var(--mono);font-size:.68rem;color:var(--muted);margin-bottom:8px">Estoques finais:</div>'+
-      '<div class="hist-substs">'+pills+'</div>'+
-      '<div class="hist-actions">'+
-        '<button class="btn-secondary" style="font-size:.72rem;padding:5px 12px" onclick="usarComoInicial('+reg.id+')">↑ Est. inicial</button>'+
-        (temReg?'<select id="hist-subst-'+reg.id+'" style="font-family:var(--mono);font-size:.72rem;padding:5px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text)">'+substOpts+'</select>'+
-        '<button class="btn-secondary" style="font-size:.72rem;padding:5px 10px" onclick="reimprimirCorpo('+reg.id+')">🖨 Corpo</button>'+
-        '<button class="btn-secondary" style="font-size:.72rem;padding:5px 10px" onclick="reimprimirEtiquetas('+reg.id+',\'grade\')">🏷 3×5</button>'+
-        '<button class="btn-secondary" style="font-size:.72rem;padding:5px 10px" onclick="reimprimirEtiquetas('+reg.id+',\'linear\')">🏷 Livro</button>':'<span style="font-size:.65rem;color:var(--muted);font-family:var(--mono)">Sem dados p/ reimprimir</span>')+
-        '<button class="btn-danger" onclick="excluirRegistro('+reg.id+')">Excluir</button></div>';
-    lista.appendChild(div);
+  const tbl=document.getElementById('mv-tbl');
+  let h='<thead><tr><th style="width:28px"><input type="checkbox" onchange="mvSelAll(this.checked)"/></th><th>Data</th><th>Tipo</th><th>Qtd(g)</th><th>Saldo(g)</th><th>OM</th><th>Tutor</th><th>Descrição</th><th>Origem</th><th></th></tr></thead><tbody>';
+  if(!s.lancamentos.length)h+='<tr><td colspan="10" style="text-align:center;color:var(--mt);padding:20px">Nenhum lançamento</td></tr>';
+  else s.lancamentos.forEach(l=>{
+    const tag=l.tipo==='entrada'?'me':l.tipo==='saida'?'ms':'mp';
+    const tl=l.tipo==='entrada'?'Entrada':l.tipo==='saida'?'Saída':'Perda';
+    const chk=mvSel[l.id]?' checked':'';
+    h+='<tr><td><input type="checkbox" data-id="'+l.id+'"'+chk+' onchange="mvTglSel(this)"/></td>';
+    h+='<td>'+(l.data||'')+'</td><td><span class="mtag '+tag+'">'+tl+'</span></td>';
+    h+='<td>'+(l.qtd?l.qtd.toFixed(4):'0')+'</td>';
+    h+='<td'+(l.saldoApos<0?' class="msneg"':'')+'>'+(l.saldoApos!==undefined?l.saldoApos.toFixed(4):'')+'</td>';
+    h+='<td>'+(l.nrOm||'')+'</td><td>'+(l.tutor||'')+'</td>';
+    h+='<td style="max-width:180px;word-break:break-word">'+(l.descricao||'')+'</td>';
+    h+='<td style="font-size:.58rem;color:var(--mt)">'+(l.origem==='importado'?'Imp':'Man')+'</td>';
+    h+='<td>'+(l.origem!=='importado'?'<button class="bd" style="font-size:.56rem;padding:2px 5px" onclick="rmMov(\''+nm+'\',\''+l.id+'\')">✕</button>':'')+'</td></tr>';
   });
+  h+='</tbody>';tbl.innerHTML=h;
+  updMvSelCnt();
 }
-
-function usarComoInicial(id){ const reg=loadHistorico().find(r=>r.id===id); if(!reg||!reg.estoquesFinal) return; SUBSTANCIAS.forEach(s=>{const i=document.getElementById('est-'+s.nome);if(i&&reg.estoquesFinal[s.nome]!==undefined)i.value=reg.estoquesFinal[s.nome];}); switchTab('gerar',document.querySelectorAll('.tab')[0]); }
-function excluirRegistro(id){ if(!confirm('Excluir este registro?')) return; saveHistorico(loadHistorico().filter(r=>r.id!==id)); renderHistorico(); }
-
-function getHistRegistros(id){ const reg=loadHistorico().find(r=>r.id===id); if(!reg||!reg.registros) return null; return{...reg,registros:reg.registros.map(d=>({...d,data:d.data?new Date(d.data):null}))}; }
-
-function reimprimirCorpo(id){
-  const reg=getHistRegistros(id); if(!reg){ alert('Dados não disponíveis.'); return; }
-  const sel=document.getElementById('hist-subst-'+id);
-  const n=sel?sel.value:null; const s=SUBSTANCIAS.find(x=>x.nome===n); if(!s) return;
-  imprimirCorpoComDados(reg.registros,reg.estoquesInicial,s,reg.estabelecimento,reg.periodoLabel);
+document.getElementById('mv-sub').addEventListener('change',()=>{mvSel={};renderMovList();});
+function mvTglSel(el){if(el.checked)mvSel[el.dataset.id]=true;else delete mvSel[el.dataset.id];updMvSelCnt();}
+function mvSelAll(c){const nm=document.getElementById('mv-sub').value;const s=getSM(nm);mvSel={};if(c)s.lancamentos.forEach(l=>{mvSel[l.id]=true;});document.querySelectorAll('#mv-tbl input[type="checkbox"]').forEach(cb=>{if(cb.dataset.id)cb.checked=c;});updMvSelCnt();}
+function updMvSelCnt(){const n=Object.keys(mvSel).length;document.getElementById('mv-sel-cnt').textContent=n?n+' selecionado(s)':'';}
+function getSelLancs(nm){const s=getSM(nm);const ids=Object.keys(mvSel);if(ids.length)return s.lancamentos.filter(l=>mvSel[l.id]);return s.lancamentos;}
+function addMov(){
+  const nm=document.getElementById('mv-sub').value;
+  const tipo=document.getElementById('mv-tipo').value;
+  const desc=document.getElementById('mv-desc').value.trim();
+  const qtd=parseFloat(document.getElementById('mv-qtd').value);
+  const data=document.getElementById('mv-data').value;
+  const nf=document.getElementById('mv-nf').value.trim();
+  const cnpj=document.getElementById('mv-cnpj').value.trim();
+  if(!qtd||qtd<=0){alert('Informe a quantidade.');return;}
+  if(!data){alert('Informe a data.');return;}
+  addLanc(nm,{id:uid(),tipo,data,qtd,descricao:up(desc),nrOm:null,nrDoc:null,origem:'manual',
+    nfNumero:nf,cnpjFornecedor:cnpj,fornecedor:up(desc)});
+  document.getElementById('mv-desc').value='';document.getElementById('mv-qtd').value='';
+  document.getElementById('mv-nf').value='';document.getElementById('mv-cnpj').value='';
+  renderMovList();
 }
-function reimprimirEtiquetas(id,modo){ const reg=getHistRegistros(id); if(!reg){ alert('Dados não disponíveis.'); return; } imprimirEtiquetas(modo,reg.registros); }
+function rmMov(n,id){if(!confirm('Remover?'))return;rmLanc(n,id);delete mvSel[id];renderMovList();}
 
-// ══════════ BACKUP ══════════
+// ═══ IMPRESSÃO — CORPO (LIVRO DE REGISTRO) ═══
+function printCorpo(){
+  const nm=document.getElementById('mv-sub').value;
+  const s=SUB.find(x=>x.n===nm);if(!s)return;
+  const sm=getSM(nm);
+  const lancs=getSelLancs(nm);
+  if(!lancs.length){alert('Nenhum lançamento para imprimir.');return;}
+  const estab=up(document.getElementById('inp-estab').value)||'R S O MANIPULAÇÃO ANIMAL';
+  const per=document.getElementById('inp-per').value.trim()||'';
+  const dtFmt=document.getElementById('mv-dtfmt').value;
+  const ei=sm.estoqueInicial;
+  // Recalculate saldo for selected range
+  let saldo=ei;
+  const allLancs=sm.lancamentos;
+  // We need to show all movements up to the selected ones to keep saldo correct
+  // If specific items selected, just show those but calculate from beginning
+  const useAll=Object.keys(mvSel).length===0;
 
-function exportarBackup(){
-  const data={versao:3,exportadoEm:new Date().toISOString(),historico:loadHistorico(),cpfs:loadCPFs(),enderecos:loadEnderecos(),prescritores:loadPrescritores(),movimentos:loadMovimentos()};
-  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
-  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
-  a.download='backup_controlados_'+new Date().toISOString().slice(0,10)+'.json'; a.click();
-  URL.revokeObjectURL(a.href);
-  markBackup(); dismissReminder();
-}
+  let thDate='',fnDate;
+  if(dtFmt==='sep'){thDate='<th style="width:7mm">DIA</th><th style="width:7mm">MÊS</th><th style="width:9mm">ANO</th>';
+    fnDate=(dt)=>{if(!dt)return '<td></td><td></td><td></td>';return '<td>'+dt.getDate()+'</td><td>'+(dt.getMonth()+1)+'</td><td>'+dt.getFullYear()+'</td>';};
+  } else {thDate='<th style="width:18mm">DATA</th>';
+    fnDate=(dt)=>'<td class="cd">'+(dt?fmtD(dt):'')+'</td>';}
 
-function importarBackup(input){
-  const file=input.files[0]; if(!file) return;
-  const r=new FileReader();
-  r.onload=e=>{
-    try{
-      const data=JSON.parse(e.target.result);
-      const hist=data.historico||(Array.isArray(data)?data:null);
-      if(!hist||!Array.isArray(hist)) throw new Error('Formato inválido');
-      let msg='Importar '+hist.length+' registros de histórico?';
-      if(data.cpfs) msg+='\n+ '+Object.keys(data.cpfs).length+' CPFs';
-      if(data.enderecos) msg+='\n+ '+Object.keys(data.enderecos).length+' endereços';
-      if(data.prescritores) msg+='\n+ '+Object.keys(data.prescritores).length+' prescritores';
-      if(data.movimentos) msg+='\n+ '+Object.keys(data.movimentos).length+' substâncias com movimentos';
-      msg+='\n\nOs dados atuais serão substituídos.';
-      if(!confirm(msg)) return;
-      saveHistorico(hist);
-      if(data.cpfs) saveCPFs(data.cpfs);
-      if(data.enderecos) saveEnderecos(data.enderecos);
-      if(data.prescritores) savePrescritores(data.prescritores);
-      if(data.movimentos) saveMovimentos(data.movimentos);
-      renderHistorico(); montarEstGrid();
-      alert('Backup importado!');
-    }catch(err){ alert('Erro: '+err.message); }
-  };
-  r.readAsText(file); input.value='';
-}
+  let html='<div class="pr-corpo"><h2>LIVRO DE REGISTRO DE ESTOQUE DE SUBSTÂNCIAS SUJEITAS A CONTROLE ESPECIAL DE USO VETERINÁRIO</h2>'+
+    '<h3>SUBSTÂNCIA (DCB): '+s.n+' ('+s.d+') | Lista: '+s.l+' | '+estab+'<br>Período: '+per+'</h3>'+
+    '<table><tr>'+thDate+'<th>EST.INICIAL(g)</th><th>ENTRADA(g)</th><th>SAÍDA(g)</th><th>PERDAS(g)</th><th>EST.FINAL(g)</th><th style="width:18mm">REG/DOC</th><th class="ci">OUTRAS INFORMAÇÕES</th><th class="crt">ASSINATURA RT</th></tr>';
 
-// ══════════ IMPRESSÃO — CORPO ══════════
+  // Estoque inicial row
+  const eiCols=dtFmt==='sep'?'<td></td><td></td><td>EST.INI</td>':'<td>EST.INICIAL</td>';
+  html+='<tr class="re">'+eiCols+'<td>'+ei.toFixed(4)+'</td><td></td><td></td><td></td><td>'+ei.toFixed(4)+'</td><td></td><td class="ci">Estoque inicial — '+per+'</td><td></td></tr>';
 
-function imprimirCorpo(){
-  const n=document.getElementById('print-subst-select').value;
-  const s=SUBSTANCIAS.find(x=>x.nome===n); if(!s) return;
-  const estab=upper(document.getElementById('estabelecimento').value)||'R S O MANIPULAÇÃO ANIMAL';
-  const periodo=document.getElementById('periodo-label').value.trim();
-  const estInicial=getEstoqueInicial();
-  const base=getSelectedDados();
-  imprimirCorpoComDados(dadosCruzados,{[s.nome]:estInicial[s.nome]||0},s,estab,periodo,base);
-}
-
-function imprimirCorpoComDados(todosDados,estInicialObj,s,estab,periodo,filtrados){
-  const estIni=estInicialObj[s.nome]||0;
-  const base=filtrados||todosDados.filter(d=>d.status==='ATIVA');
-  const ds=base.filter(d=>identificarSubstancia(d.substancia)===s.nome);
-  const movStore=getSubstMovimentos(s.nome);
-  const lancs=[];
-  ds.forEach(d=>lancs.push({tipo:'saida',data:d.data,qtd:d.qtdG||0,nrOm:d.nrOm,nrDoc:d.nrDoc,prescritor:d.prescritor,calculo:d.calculo,nrReceita:d.nrReceita}));
-  movStore.lancamentos.filter(l=>l.tipo==='entrada').forEach(l=>lancs.push({tipo:'entrada',data:l.data?new Date(l.data+'T12:00:00'):null,qtd:l.qtd,descricao:l.descricao}));
-  movStore.lancamentos.filter(l=>l.tipo==='perda').forEach(l=>lancs.push({tipo:'perda',data:l.data?new Date(l.data+'T12:00:00'):null,qtd:l.qtd,descricao:l.descricao}));
-  lancs.sort((a,b)=>{const da=a.data?(a.data instanceof Date?a.data.getTime():new Date(a.data).getTime()):0;const db=b.data?(b.data instanceof Date?b.data.getTime():new Date(b.data).getTime()):0;return da-db;});
-
-  let html='<div class="print-corpo"><h2>LIVRO DE REGISTRO DE ESTOQUE DE SUBSTÂNCIAS SUJEITAS A CONTROLE ESPECIAL DE USO VETERINÁRIO</h2>'+
-    '<h3>SUBSTÂNCIA (DCB): '+s.nome+' ('+s.dcb+') | Lista: '+s.lista+' | '+estab+'<br>Período: '+periodo+'</h3>'+
-    '<table><tr><th style="width:18mm">DATA</th><th>EST. INICIAL (g)</th><th>ENTRADA (g)</th><th>SAÍDA (g)</th><th>PERDAS (g)</th><th>EST. FINAL (g)</th><th style="width:22mm">REG/NR DOC</th><th class="col-info">OUTRAS INFORMAÇÕES</th></tr>'+
-    '<tr class="row-est"><td>EST. INICIAL</td><td>'+estIni.toFixed(4)+'</td><td></td><td></td><td></td><td>'+estIni.toFixed(4)+'</td><td></td><td class="col-info">Estoque inicial — '+periodo+'</td></tr>';
-
-  let saldo=estIni;
-  for(const l of lancs){
-    const dt=l.data instanceof Date?l.data:(l.data?new Date(l.data):null);
-    const ent=l.tipo==='entrada'?l.qtd:0,sai=l.tipo==='saida'?l.qtd:0,per=l.tipo==='perda'?l.qtd:0;
-    const ns=arred(saldo+ent-sai-per);
-    let info='';if(l.tipo==='saida') info=['Rec: '+l.nrReceita,l.prescritor,l.calculo].filter(Boolean).join(' | ');else if(l.tipo==='entrada') info='ENTRADA: '+(l.descricao||'');else info='PERDA: '+(l.descricao||'');
-    html+='<tr><td class="col-data">'+(dt?fmtData(dt):'')+'</td><td>'+arred(saldo).toFixed(4)+'</td><td>'+(ent?ent.toFixed(4):'')+'</td><td>'+(sai?sai.toFixed(4):'')+'</td><td>'+(per?per.toFixed(4):'')+'</td><td>'+ns.toFixed(4)+'</td><td>'+(l.nrOm?l.nrOm+'/'+l.nrDoc:(l.tipo==='entrada'?'ENT':'PER'))+'</td><td class="col-info">'+info+'</td></tr>';
-    saldo=ns;
+  saldo=ei;
+  const rows=useAll?allLancs:lancs;
+  // If using selected, still need correct saldo — recalculate from all
+  if(!useAll){
+    // recalc all to get correct saldo before each selected item
+    let s2=ei;
+    for(const l of allLancs){
+      if(l.tipo==='entrada')s2=ar(s2+l.qtd);else s2=ar(s2-l.qtd);
+      l.saldoApos=s2;
+    }
   }
-  html+='<tr class="row-est"><td>EST. FINAL</td><td></td><td></td><td></td><td></td><td>'+arred(saldo).toFixed(4)+'</td><td></td><td class="col-info">Estoque final do período</td></tr></table></div>';
+
+  for(const l of rows){
+    const dt=l.data?new Date(l.data+'T12:00:00'):null;
+    const ent=l.tipo==='entrada'?l.qtd:0;
+    const sai=l.tipo==='saida'?l.qtd:0;
+    const per2=l.tipo==='perda'?l.qtd:0;
+    const sBefore=ar((l.saldoApos||0)+(sai+per2)-ent);
+    const sAfter=l.saldoApos;
+
+    // Outras informações conforme Art 11 §4
+    let info='';
+    if(l.tipo==='saida'){
+      info=[l.tutor,l.cpf?'CPF: '+l.cpf:'',l.nrReceita?'Rec: '+l.nrReceita:'',l.prescritor?'CRMV-'+(l.crmvUf||'GO')+' '+l.crmvNr:''].filter(Boolean).join(' | ');
+    } else if(l.tipo==='entrada'){
+      info=['ENTRADA',l.nfNumero?'NF: '+l.nfNumero:'',l.cnpjFornecedor?'CNPJ: '+l.cnpjFornecedor:'',l.fornecedor||l.descricao].filter(Boolean).join(' | ');
+    } else {
+      info='PERDA: '+(l.descricao||'');
+    }
+
+    html+='<tr>'+fnDate(dt)+'<td>'+ar(sBefore).toFixed(4)+'</td><td>'+(ent?ent.toFixed(4):'')+'</td><td>'+(sai?sai.toFixed(4):'')+'</td><td>'+(per2?per2.toFixed(4):'')+'</td><td>'+ar(sAfter).toFixed(4)+'</td><td>'+(l.nrOm?l.nrOm+'/'+l.nrDoc:(l.tipo==='entrada'?'ENT':'PER'))+'</td><td class="ci">'+info+'</td><td></td></tr>';
+  }
+
+  const finalSaldo=rows.length?rows[rows.length-1].saldoApos:ei;
+  const efCols=dtFmt==='sep'?'<td></td><td></td><td>EST.FIN</td>':'<td>EST.FINAL</td>';
+  html+='<tr class="re">'+efCols+'<td></td><td></td><td></td><td></td><td>'+ar(finalSaldo).toFixed(4)+'</td><td></td><td class="ci">Estoque final do período</td><td></td></tr></table></div>';
+
   document.getElementById('print-area').innerHTML=html;
   window.print();
 }
 
-// ══════════ IMPRESSÃO — ETIQUETAS ══════════
-
-function etqDataStr(d){
-  if(d.data instanceof Date) return fmtData(d.data);
-  if(d.data&&typeof d.data==='string'){const dt=new Date(d.data);return isNaN(dt)?d.dataStr||d.data:fmtData(dt);}
-  return d.dataStr||'';
-}
-
-function imprimirEtiquetas(modo,dadosExt){
-  const src=dadosExt||dadosCruzados;
-  if(!src.length) return;
-  const lista=dadosExt?src.filter(d=>d.status==='ATIVA'):getSelectedDados(src);
-  if(!lista.length){alert('Nenhuma dispensação ativa.');return;}
+// ═══ IMPRESSÃO — ETIQUETAS ═══
+function etqDt(l){if(!l.data)return'';const dt=new Date(l.data+'T12:00:00');return isNaN(dt)?l.data:fmtD(dt);}
+function printEtq(modo){
+  const nm=document.getElementById('mv-sub').value;
+  const lancs=getSelLancs(nm).filter(l=>l.tipo==='saida');
+  if(!lancs.length){alert('Nenhuma saída para etiquetas.');return;}
   let html='';
   if(modo==='linear'){
-    html='<div class="print-etiquetas-linear">';
-    for(const d of lista){
-      html+='<div class="etq-linear"><div class="etq-l-top"><strong>'+d.substancia+'</strong><span>OM: '+d.nrOm+'</span><span>DOC: '+d.nrDoc+'</span><span>Data: '+etqDataStr(d)+'</span><span>Qtd: '+(d.qtdG?d.qtdG.toFixed(4)+' g':'')+'</span></div>'+
-        '<div class="etq-l-body"><span><strong>Tutor:</strong> '+d.clienteFull+'</span><span><strong>CPF:</strong> '+(d.cpf||'_______________')+'</span><span><strong>End.:</strong> '+(d.endereco||'')+'</span></div>'+
-        '<div class="etq-l-body"><span><strong>Prescritor:</strong> '+d.prescritor+'</span><span><strong>CRMV:</strong> '+(d.crmvNrCE||d.crmvNr||'')+'</span><span><strong>Conc.:</strong> '+(d.calculo||'')+((d.doseMg)?(' ('+d.doseMg+' mg)'):'')+'</span></div>'+
-        '<div class="etq-l-rt">RT: <span class="etq-l-rt-line"></span></div></div>';
+    html='<div class="pr-etql">';
+    for(const l of lancs){
+      html+='<div class="eql"><div class="eql-t"><strong>'+l.substancia+'</strong><span>OM: '+l.nrOm+'</span><span>DOC: '+(l.nrDoc||'')+'</span><span>Data: '+etqDt(l)+'</span><span>Qtd: '+(l.qtd?l.qtd.toFixed(4)+' g':'')+'</span></div>'+
+      '<div class="eql-b"><span><strong>Tutor:</strong> '+(l.tutor||'')+'</span><span><strong>CPF:</strong> '+(l.cpf||'___________')+'</span><span><strong>End.:</strong> '+(l.endereco||'')+'</span></div>'+
+      '<div class="eql-b"><span><strong>Prescritor:</strong> '+(l.prescritor||'')+'</span><span><strong>CRMV-'+(l.crmvUf||'GO')+':</strong> '+(l.crmvNr||'')+'</span><span><strong>Conc.:</strong> '+(l.calculo||'')+'</span></div>'+
+      '<div class="eql-r">RT: <span class="eql-rl"></span></div></div>';
     }
     html+='</div>';
   } else {
-    const pags=[];for(let i=0;i<lista.length;i+=15) pags.push(lista.slice(i,i+15));
-    html='<div class="print-etiquetas">';
+    const pags=[];for(let i=0;i<lancs.length;i+=15)pags.push(lancs.slice(i,i+15));
+    html='<div class="pr-etq">';
     for(const p of pags){
-      html+='<div class="etq-page">';
-      for(const d of p){
-        html+='<div class="etq"><div class="etq-subst">'+d.substancia+'</div>'+
-          '<div class="etq-field"><strong>OM:</strong> '+d.nrOm+' <strong>DOC:</strong> '+d.nrDoc+' <strong>Data:</strong> '+etqDataStr(d)+'</div>'+
-          '<div class="etq-field"><strong>Tutor:</strong> '+d.clienteFull+'</div>'+
-          '<div class="etq-field"><strong>CPF:</strong> '+(d.cpf||'___________')+' </div>'+
-          '<div class="etq-field"><strong>End.:</strong> '+(d.endereco||'')+'</div>'+
-          '<div class="etq-field"><strong>Prescritor:</strong> '+d.prescritor+' <strong>CRMV:</strong> '+(d.crmvNrCE||'')+'</div>'+
-          '<div class="etq-field"><strong>Conc.:</strong> '+(d.calculo||'')+((d.doseMg)?(' ('+d.doseMg+' mg)'):'')+' <strong>Qtd:</strong> '+(d.qtdG?d.qtdG.toFixed(4)+' g':'')+'</div>'+
-          '<div class="etq-rt"><span>RT:</span> <span class="etq-rt-line"></span></div></div>';
+      html+='<div class="eq-page">';
+      for(const l of p){
+        html+='<div class="eq"><div class="eq-s">'+(l.substancia||'')+'</div>'+
+        '<div class="eq-f"><strong>OM:</strong> '+l.nrOm+' <strong>DOC:</strong> '+(l.nrDoc||'')+' <strong>Data:</strong> '+etqDt(l)+'</div>'+
+        '<div class="eq-f"><strong>Tutor:</strong> '+(l.tutor||'')+'</div>'+
+        '<div class="eq-f"><strong>CPF:</strong> '+(l.cpf||'_________')+'</div>'+
+        '<div class="eq-f"><strong>End.:</strong> '+(l.endereco||'')+'</div>'+
+        '<div class="eq-f"><strong>Presc.:</strong> '+(l.prescritor||'')+' <strong>CRMV-'+(l.crmvUf||'GO')+':</strong> '+(l.crmvNr||'')+'</div>'+
+        '<div class="eq-f"><strong>Conc.:</strong> '+(l.calculo||'')+' <strong>Qtd:</strong> '+(l.qtd?l.qtd.toFixed(4)+' g':'')+'</div>'+
+        '<div class="eq-rt"><span>RT:</span> <span class="eq-rl"></span></div></div>';
       }
-      for(let i=p.length;i<15;i++) html+='<div class="etq" style="border-color:transparent"></div>';
+      for(let i=p.length;i<15;i++)html+='<div class="eq" style="border-color:transparent"></div>';
       html+='</div>';
     }
     html+='</div>';
@@ -788,109 +514,120 @@ function imprimirEtiquetas(modo,dadosExt){
   window.print();
 }
 
-// ══════════ IMPRESSÃO — RESUMO FISCALIZAÇÃO MAPA ══════════
-
-function imprimirResumoFiscalizacao(){
-  const estab=upper(document.getElementById('estabelecimento').value)||'R S O MANIPULAÇÃO ANIMAL';
-  const periodo=document.getElementById('periodo-label').value.trim();
-  const est=getEstoqueInicial();
-  const ativas=dadosCruzados.filter(d=>d.status==='ATIVA');
-
-  let html='<div class="print-resumo">'+
-    '<h2>RESUMO PARA FISCALIZAÇÃO — MAPA</h2>'+
-    '<h3>'+estab+' · GO 0198-8<br>RT: Paulo Edson Fernandes — CRF-GO 9303<br>Período: '+periodo+'</h3>'+
-    '<table><tr><th>Substância</th><th>Lista</th><th>DCB</th><th>Est. Inicial (g)</th><th>Entradas (g)</th><th>Saídas (g)</th><th>Perdas (g)</th><th>Est. Final (g)</th><th>Nº Dispensações</th></tr>';
-
-  for(const s of SUBSTANCIAS){
-    const ds=ativas.filter(d=>identificarSubstancia(d.substancia)===s.nome);
-    const totalSaida=arred(ds.reduce((a,d)=>a+(d.qtdG||0),0));
-    const movs=getSubstMovimentos(s.nome);
-    const totalEntrada=arred(movs.lancamentos.filter(l=>l.tipo==='entrada').reduce((a,l)=>a+l.qtd,0));
-    const totalPerda=arred(movs.lancamentos.filter(l=>l.tipo==='perda').reduce((a,l)=>a+l.qtd,0));
-    const ei=est[s.nome]||0;
-    const ef=arred(ei+totalEntrada-totalSaida-totalPerda);
-    html+='<tr><td>'+s.nome+'</td><td style="text-align:center">'+s.lista+'</td><td style="text-align:center">'+s.dcb+'</td>'+
-      '<td style="text-align:right">'+ei.toFixed(4)+'</td><td style="text-align:right">'+(totalEntrada?totalEntrada.toFixed(4):'—')+'</td>'+
-      '<td style="text-align:right">'+(totalSaida?totalSaida.toFixed(4):'—')+'</td><td style="text-align:right">'+(totalPerda?totalPerda.toFixed(4):'—')+'</td>'+
-      '<td style="text-align:right">'+ef.toFixed(4)+'</td><td style="text-align:center">'+(ds.length||'—')+'</td></tr>';
+// ═══ IMPRESSÃO — ANEXO VII (ESTOQUE SUBSTÂNCIAS) ═══
+function printAnexoVII(){
+  const estab=up(document.getElementById('inp-estab').value)||'R S O MANIPULAÇÃO ANIMAL';
+  const per=document.getElementById('inp-per').value.trim()||'';
+  let html='<div class="pr-anx"><h2>ANEXO VII — RELATÓRIO DE ESTOQUE DE SUBSTÂNCIAS SUJEITAS A CONTROLE ESPECIAL</h2>'+
+    '<h3>'+estab+' · CNPJ: _____________ · Licença MAPA: _____________<br>Ano de referência: '+new Date().getFullYear()+' · Período: '+per+'</h3>'+
+    '<table><tr><th>SUBSTÂNCIA (DCB)</th><th>LISTA</th><th>ESTOQUE INICIAL(g)</th><th>IMPORTAÇÃO(g)</th><th>PRODUÇÃO(g)</th><th>AQUISIÇÃO(g)</th><th>PERDAS(g)</th><th>VENDAS(g)</th><th>FABRICAÇÃO PROD. USO VET.(g)</th><th>ESTOQUE FINAL(g)</th></tr>';
+  for(const s of SUB){
+    const sm=getSM(s.n);
+    const te=ar(sm.lancamentos.filter(l=>l.tipo==='entrada').reduce((a,l)=>a+l.qtd,0));
+    const ts=ar(sm.lancamentos.filter(l=>l.tipo==='saida').reduce((a,l)=>a+l.qtd,0));
+    const tp=ar(sm.lancamentos.filter(l=>l.tipo==='perda').reduce((a,l)=>a+l.qtd,0));
+    const sf=saldoFinal(s.n);
+    html+='<tr><td>'+s.n+' ('+s.d+')</td><td style="text-align:center">'+s.l+'</td><td style="text-align:right">'+ar(sm.estoqueInicial).toFixed(4)+'</td><td></td><td></td><td style="text-align:right">'+(te?te.toFixed(4):'—')+'</td><td style="text-align:right">'+(tp?tp.toFixed(4):'—')+'</td><td></td><td style="text-align:right">'+(ts?ts.toFixed(4):'—')+'</td><td style="text-align:right">'+ar(sf).toFixed(4)+'</td></tr>';
   }
-  html+='</table>'+
-    '<p style="font-size:8pt;margin-top:4mm"><strong>Total de dispensações ativas:</strong> '+ativas.length+'</p>'+
-    '<p style="font-size:8pt"><strong>Período abrangido:</strong> '+periodo+'</p>'+
-    '<p style="font-size:8pt"><strong>Sistema:</strong> Farma Fácil · Processado em '+new Date().toLocaleDateString('pt-BR')+'</p>'+
-    '<div class="sig-area"><div class="sig-line"><hr><strong>Paulo Edson Fernandes</strong><br>Farmacêutico RT — CRF-GO 9303</div><div class="sig-line"><hr><strong>Fiscal MAPA</strong><br>Matrícula / Carimbo</div></div></div>';
-
+  html+='</table>';
+  // Sub-table: aquisições
+  html+='<h4>RELATÓRIO DE AQUISIÇÕES DE SUBSTÂNCIAS</h4><table><tr><th>SUBSTÂNCIA (DCB)</th><th>LISTA</th><th>QUANTIDADE(g)</th><th>CNPJ FORNECEDOR</th><th>NOME FORNECEDOR/UF</th><th>Nº NF</th><th>DATA NF</th></tr>';
+  for(const s of SUB){
+    const sm=getSM(s.n);
+    sm.lancamentos.filter(l=>l.tipo==='entrada').forEach(l=>{
+      html+='<tr><td>'+s.n+'</td><td>'+s.l+'</td><td>'+l.qtd.toFixed(4)+'</td><td>'+(l.cnpjFornecedor||'')+'</td><td>'+(l.fornecedor||l.descricao||'')+'</td><td>'+(l.nfNumero||'')+'</td><td>'+(l.data||'')+'</td></tr>';
+    });
+  }
+  html+='</table>';
+  html+='<div class="sig"><hr><strong>Paulo Edson Fernandes</strong><br>Farmacêutico RT — CRF-GO 9303</div></div>';
   document.getElementById('print-area').innerHTML=html;
   window.print();
 }
 
-// ══════════ ABA MOVIMENTOS ══════════
-
-function renderMovimentos(){
-  const sel=document.getElementById('mov-subst');
-  const cur=sel.value;
-  sel.innerHTML=SUBSTANCIAS.map(s=>'<option value="'+s.nome+'"'+(s.nome===cur?' selected':'')+'>'+s.nome+' ('+s.lista+')</option>').join('');
-  renderMovimentosLista();
+// ═══ IMPRESSÃO — ANEXO VIII (MOVIMENTAÇÃO PRODUTOS) ═══
+function printAnexoVIII(){
+  const estab=up(document.getElementById('inp-estab').value)||'R S O MANIPULAÇÃO ANIMAL';
+  const per=document.getElementById('inp-per').value.trim()||'';
+  let html='<div class="pr-anx"><h2>ANEXO VIII — RELATÓRIO DE MOVIMENTAÇÃO DE ESTOQUE DE PRODUTOS DE USO VETERINÁRIO QUE CONTENHAM SUBSTÂNCIAS SUJEITAS A CONTROLE ESPECIAL</h2>'+
+    '<h3>'+estab+' · CNPJ: _____________ · Licença MAPA: _____________<br>Ano de referência: '+new Date().getFullYear()+' · Período: '+per+'</h3>'+
+    '<table><tr><th>SUBSTÂNCIA (DCB)</th><th>LISTA</th><th>NOME PRODUTO</th><th>Nº LICENÇA</th><th>APRESENTAÇÃO</th><th>ESTOQUE INICIAL</th><th>ENTRADAS (AQUISIÇÃO)</th><th>SAÍDAS (VENDAS)</th><th>PERDAS</th><th>ESTOQUE FINAL</th></tr>';
+  for(const s of SUB){
+    const sm=getSM(s.n);
+    const te=ar(sm.lancamentos.filter(l=>l.tipo==='entrada').reduce((a,l)=>a+l.qtd,0));
+    const ts=ar(sm.lancamentos.filter(l=>l.tipo==='saida').reduce((a,l)=>a+l.qtd,0));
+    const tp=ar(sm.lancamentos.filter(l=>l.tipo==='perda').reduce((a,l)=>a+l.qtd,0));
+    html+='<tr><td>'+s.n+' ('+s.d+')</td><td>'+s.l+'</td><td>Manipulado</td><td></td><td>Cápsulas/sachê</td><td style="text-align:right">'+ar(sm.estoqueInicial).toFixed(4)+'</td><td style="text-align:right">'+(te?te.toFixed(4):'—')+'</td><td style="text-align:right">'+(ts?ts.toFixed(4):'—')+'</td><td style="text-align:right">'+(tp?tp.toFixed(4):'—')+'</td><td style="text-align:right">'+ar(saldoFinal(s.n)).toFixed(4)+'</td></tr>';
+  }
+  html+='</table>';
+  // Vendas detail
+  html+='<h4>RELATÓRIO DE VENDAS DE PRODUTOS QUE CONTENHAM SUBSTÂNCIAS SUJEITAS A CONTROLE ESPECIAL</h4><table><tr><th>SUBSTÂNCIA</th><th>LISTA</th><th>QUANTIDADE(g)</th><th>CPF/CNPJ ADQUIRENTE</th><th>NOME ADQUIRENTE</th><th>Nº CADASTRO MED VET</th><th>Nº RECEITA</th><th>DATA</th></tr>';
+  for(const s of SUB){
+    const sm=getSM(s.n);
+    sm.lancamentos.filter(l=>l.tipo==='saida').forEach(l=>{
+      html+='<tr><td>'+s.n+'</td><td>'+s.l+'</td><td>'+l.qtd.toFixed(4)+'</td><td>'+(l.cpf||'')+'</td><td>'+(l.tutor||'')+'</td><td>'+(l.crmvNr?'CRMV-'+(l.crmvUf||'GO')+' '+l.crmvNr:'')+'</td><td>'+(l.nrReceita||'')+'</td><td>'+(l.data||'')+'</td></tr>';
+    });
+  }
+  html+='</table>';
+  html+='<div class="sig"><hr><strong>Paulo Edson Fernandes</strong><br>Farmacêutico RT — CRF-GO 9303</div></div>';
+  document.getElementById('print-area').innerHTML=html;
+  window.print();
 }
 
-function renderMovimentosLista(){
-  const nome=document.getElementById('mov-subst').value;
-  recalcularSaldos(nome);
-  const s=getSubstMovimentos(nome);
-  const te=s.lancamentos.filter(l=>l.tipo==='entrada').reduce((a,l)=>a+l.qtd,0);
-  const ts=s.lancamentos.filter(l=>l.tipo==='saida').reduce((a,l)=>a+l.qtd,0);
-  const tp=s.lancamentos.filter(l=>l.tipo==='perda').reduce((a,l)=>a+l.qtd,0);
-  const sf=s.lancamentos.length?s.lancamentos[s.lancamentos.length-1].saldoApos:s.estoqueInicial;
-  document.getElementById('mov-resumo').innerHTML=[
-    {n:arred(s.estoqueInicial)+' g',l:'Est. Inicial',c:''},
-    {n:arred(te)+' g',l:'Entradas',c:'var(--green)'},
-    {n:arred(ts)+' g',l:'Saídas',c:'var(--accent)'},
-    {n:arred(tp)+' g',l:'Perdas',c:'var(--red)'},
-    {n:arred(sf)+' g',l:'Saldo Final',c:sf<0?'var(--red)':'var(--green)'},
-  ].map(x=>'<div class="stat-box"><div class="stat-num" style="font-size:1rem;'+(x.c?'color:'+x.c:'')+'">'+x.n+'</div><div class="stat-lbl">'+x.l+'</div></div>').join('');
-
-  const table=document.getElementById('mov-table');
-  let html='<thead><tr><th>Data</th><th>Tipo</th><th>Qtd (g)</th><th>Saldo (g)</th><th>Descrição</th><th>Origem</th><th></th></tr></thead><tbody>';
-  if(!s.lancamentos.length) html+='<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px">Nenhum lançamento</td></tr>';
-  else s.lancamentos.forEach(l=>{
-    const tag='mov-tag mov-tag-'+l.tipo;
-    const tl=l.tipo==='entrada'?'Entrada':l.tipo==='saida'?'Saída':'Perda';
-    html+='<tr><td>'+( l.data||'')+'</td><td><span class="'+tag+'">'+tl+'</span></td><td>'+(l.qtd?l.qtd.toFixed(4):'0')+'</td>'+
-      '<td'+(l.saldoApos<0?' class="mov-saldo-neg"':'')+'>'+(l.saldoApos!==undefined?l.saldoApos.toFixed(4):'')+'</td>'+
-      '<td style="max-width:200px;word-break:break-word">'+(l.descricao||'')+'</td>'+
-      '<td style="font-size:.6rem;color:var(--muted)">'+(l.origem==='importado'?'Importado':'Manual')+'</td>'+
-      '<td>'+(l.origem!=='importado'?'<button class="btn-danger" style="font-size:.58rem;padding:2px 6px" onclick="removerMov(\''+nome+'\',\''+l.id+'\')">✕</button>':'')+'</td></tr>';
+// ═══ HISTÓRICO ═══
+function renderHist(){
+  const hist=ldH(),el=document.getElementById('hist-list');
+  if(!hist.length){el.innerHTML='<div class="he">Nenhum registro.</div>';return;}
+  el.innerHTML='';
+  [...hist].reverse().forEach(reg=>{
+    const dt=new Date(reg.geradoEm);
+    const dtStr=dt.toLocaleDateString('pt-BR')+' '+dt.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+    const div=document.createElement('div');div.className='hi';
+    const pills=SUB.map(s=>{const f=reg.estoquesFinal?.[s.n];if(f===undefined)return'';return'<span class="hpl">'+s.n+' <span>'+f.toFixed(4)+'g</span></span>';}).join('');
+    div.innerHTML='<div class="hh"><div class="hp">'+(reg.periodoLabel||'Período')+'</div><div class="hd">'+dtStr+'</div></div>'+
+      '<div style="font-family:var(--mono);font-size:.7rem;color:var(--mt);margin-bottom:6px">'+reg.totalRegistros+' dispensações · '+reg.estabelecimento+'</div>'+
+      '<div class="hs">'+pills+'</div>'+
+      '<div class="ha"><button class="bs" style="font-size:.7rem;padding:4px 10px" onclick="useAsEI('+reg.id+')">↑ Est. inicial</button>'+
+      '<button class="bd" onclick="delHist('+reg.id+')">Excluir</button></div>';
+    el.appendChild(div);
   });
-  html+='</tbody>';table.innerHTML=html;
+}
+function useAsEI(id){const reg=ldH().find(r=>r.id===id);if(!reg||!reg.estoquesFinal)return;SUB.forEach(s=>{if(reg.estoquesFinal[s.n]!==undefined)setEI(s.n,reg.estoquesFinal[s.n]);});swTab('mov',document.querySelectorAll('.tab')[1]);alert('Estoques iniciais atualizados.');}
+function delHist(id){if(!confirm('Excluir?'))return;svH(ldH().filter(r=>r.id!==id));renderHist();}
+
+// ═══ BACKUP ═══
+function exportarBackup(){
+  const data={versao:4,exportadoEm:new Date().toISOString(),historico:ldH(),cpfs:ldC(),enderecos:ldE(),prescritores:ldP(),movimentos:ldM()};
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='backup_controlados_'+new Date().toISOString().slice(0,10)+'.json';a.click();
+  URL.revokeObjectURL(a.href);markBkp();document.getElementById('bkp-rem').classList.remove('v');
+}
+function importarBackup(inp){
+  const file=inp.files[0];if(!file)return;
+  const r=new FileReader();
+  r.onload=e=>{try{
+    const data=JSON.parse(e.target.result);
+    const hist=data.historico||(Array.isArray(data)?data:null);
+    if(!hist||!Array.isArray(hist))throw new Error('Formato inválido');
+    let msg='Importar '+hist.length+' registros?';
+    if(data.cpfs)msg+='\n+ '+Object.keys(data.cpfs).length+' CPFs';
+    if(data.enderecos)msg+='\n+ '+Object.keys(data.enderecos).length+' endereços';
+    if(data.prescritores)msg+='\n+ '+Object.keys(data.prescritores).length+' prescritores';
+    if(data.movimentos)msg+='\n+ '+Object.keys(data.movimentos).length+' substâncias';
+    msg+='\n\nDados atuais serão substituídos.';
+    if(!confirm(msg))return;
+    svH(hist);
+    if(data.cpfs)svC(data.cpfs);
+    if(data.enderecos)svE(data.enderecos);
+    if(data.prescritores)svP(data.prescritores);
+    if(data.movimentos)svM(data.movimentos);
+    renderHist();alert('Backup importado!');
+  }catch(err){alert('Erro: '+err.message);}};
+  r.readAsText(file);inp.value='';
 }
 
-document.getElementById('mov-subst').addEventListener('change',renderMovimentosLista);
-
-function adicionarMovimento(){
-  const nome=document.getElementById('mov-subst').value;
-  const tipo=document.getElementById('mov-tipo').value;
-  const desc=document.getElementById('mov-descricao').value.trim();
-  const qtd=parseFloat(document.getElementById('mov-qtd').value);
-  const data=document.getElementById('mov-data').value;
-  if(!qtd||qtd<=0){alert('Informe a quantidade.');return;}
-  if(!data){alert('Informe a data.');return;}
-  adicionarLancamento(nome,{id:uid(),tipo,data,qtd,descricao:upper(desc),nrOm:null,nrDoc:null,origem:'manual'});
-  document.getElementById('mov-descricao').value='';document.getElementById('mov-qtd').value='';
-  renderMovimentosLista();
-}
-function removerMov(n,id){if(!confirm('Remover lançamento?'))return;removerLancamento(n,id);renderMovimentosLista();}
-
-// ══════════ DOWNLOAD ══════════
-
-document.getElementById('btn-download').addEventListener('click',()=>{
-  if(!xlsxBlob) return;
-  const a=document.createElement('a');a.href=URL.createObjectURL(xlsxBlob);a.download='Controlados_RSO.xlsx';a.click();URL.revokeObjectURL(a.href);
-});
-
-// ══════════ INIT ══════════
-
-setupDrop('zone-mov','file-mov','fname-mov','mov');
-setupDrop('zone-ce','file-ce','fname-ce','ce');
-montarEstGrid();
-document.getElementById('mov-subst').innerHTML=SUBSTANCIAS.map(s=>'<option value="'+s.nome+'">'+s.nome+' ('+s.lista+')</option>').join('');
-checkBackupReminder();
+// ═══ INIT ═══
+setupDZ('z-m','f-m','fn-m','m');
+setupDZ('z-c','f-c','fn-c','c');
+document.getElementById('mv-sub').innerHTML=SUB.map(s=>'<option value="'+s.n+'">'+s.n+' ('+s.l+')</option>').join('');
+chkBkp();
