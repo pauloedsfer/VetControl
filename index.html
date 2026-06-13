@@ -1,440 +1,289 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Controlados · Fórmula Animal</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
-  <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
-  <style>
-    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-    :root{
-      --bg:#0d1117;--surface:#161b22;--surface2:#21262d;--border:#30363d;
-      --accent:#2f81f7;--accent2:#388bfd;--green:#3fb950;--yellow:#d29922;
-      --red:#f85149;--text:#e6edf3;--muted:#8b949e;
-      --mono:'DM Mono',monospace;--sans:'DM Sans',sans-serif;--display:'Plus Jakarta Sans',sans-serif;
-    }
-    html{scroll-behavior:smooth}
-    body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;overflow-x:hidden}
-    body::before{content:'';position:fixed;inset:0;
-      background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px);
-      background-size:48px 48px;opacity:.15;pointer-events:none;z-index:0}
-    .wrapper{position:relative;z-index:1;max-width:960px;margin:0 auto;padding:48px 24px 96px}
-
-    header{display:flex;align-items:center;gap:16px;margin-bottom:48px}
-    .logo-badge{width:48px;height:48px;background:var(--accent);border-radius:12px;
-      display:grid;place-items:center;flex-shrink:0;box-shadow:0 0 24px rgba(47,129,247,.4)}
-    .logo-badge svg{width:26px;height:26px}
-    .header-text h1{font-family:var(--display);font-size:1.5rem;font-weight:800;letter-spacing:-.02em;line-height:1.1}
-    .header-text p{font-size:.8rem;color:var(--muted);font-family:var(--mono);margin-top:2px}
-    .version-tag{margin-left:auto;font-family:var(--mono);font-size:.7rem;color:var(--muted);
-      background:var(--surface2);border:1px solid var(--border);padding:4px 10px;border-radius:20px}
-
-    /* ── banner lembrete ── */
-    .reminder-bar{display:none;background:rgba(210,153,34,.1);border:1px solid var(--yellow);
-      border-radius:10px;padding:12px 18px;margin-bottom:20px;font-family:var(--mono);font-size:.75rem;
-      color:var(--yellow);align-items:center;gap:10px}
-    .reminder-bar.visible{display:flex}
-    .reminder-bar button{margin-left:auto;flex-shrink:0}
-
-    .tabs{display:flex;gap:4px;margin-bottom:24px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:4px}
-    .tab{flex:1;padding:10px 12px;border:none;background:transparent;color:var(--muted);
-      font-family:var(--display);font-size:.78rem;font-weight:700;border-radius:7px;cursor:pointer;transition:.2s}
-    .tab.active{background:var(--accent);color:#fff;box-shadow:0 2px 12px rgba(47,129,247,.4)}
-    .tab-panel{display:none}.tab-panel.active{display:block}
-
-    .section-label{font-family:var(--mono);font-size:.7rem;font-weight:500;letter-spacing:.12em;
-      text-transform:uppercase;color:var(--accent);margin-bottom:12px;margin-top:20px}
-    .section-label:first-child{margin-top:0}
-
-    .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:16px}
-
-    .upload-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
-    @media(max-width:560px){.upload-grid{grid-template-columns:1fr}}
-    .drop-zone{position:relative;border:2px dashed var(--border);border-radius:10px;padding:24px 16px;text-align:center;cursor:pointer;transition:.2s}
-    .drop-zone:hover,.drop-zone.drag-over{border-color:var(--accent);background:rgba(47,129,247,.06)}
-    .drop-zone.ready{border-color:var(--green);background:rgba(63,185,80,.06)}
-    .drop-zone input[type="file"]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
-    .drop-icon{font-size:1.8rem;margin-bottom:6px;display:block}
-    .drop-label{font-family:var(--display);font-size:.82rem;font-weight:700;color:var(--text);display:block;margin-bottom:3px}
-    .drop-hint{font-size:.7rem;color:var(--muted);font-family:var(--mono)}
-    .drop-filename{margin-top:6px;font-family:var(--mono);font-size:.7rem;color:var(--green);word-break:break-all}
-
-    .est-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-bottom:16px}
-    .est-field{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px}
-    .est-field label{display:block;font-family:var(--mono);font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px}
-    .est-field .subst-name{font-family:var(--display);font-size:.78rem;font-weight:700;color:var(--text);margin-bottom:8px}
-    .est-field input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;
-      color:var(--text);font-family:var(--mono);font-size:.82rem;padding:7px 10px;outline:none;transition:.2s}
-    .est-field input:focus{border-color:var(--accent)}
-    .est-field .last-val{font-family:var(--mono);font-size:.65rem;color:var(--green);margin-top:5px}
-
-    .field label{display:block;font-family:var(--mono);font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px}
-    .field input,.field select{width:100%;background:var(--surface2);border:1px solid var(--border);
-      border-radius:8px;color:var(--text);font-family:var(--mono);font-size:.82rem;padding:8px 12px;outline:none;transition:.2s}
-    .field input:focus,.field select:focus{border-color:var(--accent)}
-    .field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
-    @media(max-width:560px){.field-row{grid-template-columns:1fr}}
-
-    .btn-primary{display:flex;align-items:center;gap:10px;background:var(--accent);color:#fff;
-      font-family:var(--display);font-size:.9rem;font-weight:700;border:none;border-radius:10px;
-      padding:14px 28px;cursor:pointer;width:100%;justify-content:center;transition:.2s;box-shadow:0 4px 20px rgba(47,129,247,.35)}
-    .btn-primary:hover:not(:disabled){background:var(--accent2);box-shadow:0 6px 28px rgba(47,129,247,.5);transform:translateY(-1px)}
-    .btn-primary:disabled{opacity:.4;cursor:not-allowed;box-shadow:none}
-    .btn-secondary{display:inline-flex;align-items:center;gap:8px;background:var(--surface2);color:var(--text);
-      font-family:var(--display);font-size:.82rem;font-weight:700;border:1px solid var(--border);border-radius:8px;padding:10px 18px;cursor:pointer;transition:.2s}
-    .btn-secondary:hover{border-color:var(--accent);color:var(--accent)}
-    .btn-download{display:flex;align-items:center;gap:10px;background:var(--green);color:#0d1117;
-      font-family:var(--display);font-size:.9rem;font-weight:800;border:none;border-radius:10px;
-      padding:14px 28px;cursor:pointer;width:100%;justify-content:center;transition:.2s;box-shadow:0 4px 20px rgba(63,185,80,.3)}
-    .btn-download:hover{filter:brightness(1.1);transform:translateY(-1px)}
-    .btn-danger{background:transparent;border:1px solid var(--red);color:var(--red);font-family:var(--mono);font-size:.72rem;border-radius:6px;padding:5px 12px;cursor:pointer;transition:.2s}
-    .btn-danger:hover{background:var(--red);color:#fff}
-    .btn-sm{font-size:.72rem;padding:6px 12px}
-    .btn-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
-
-    .progress-wrap{display:none;margin-top:16px}
-    .progress-wrap.visible{display:block}
-    .progress-track{height:4px;background:var(--surface2);border-radius:4px;overflow:hidden;margin-bottom:8px}
-    .progress-bar{height:100%;width:0%;background:linear-gradient(90deg,var(--accent),var(--green));border-radius:4px;transition:width .3s}
-    .progress-text{font-family:var(--mono);font-size:.72rem;color:var(--muted)}
-    .log-box{display:none;background:var(--surface2);border:1px solid var(--border);border-radius:8px;
-      padding:12px 16px;margin-top:12px;font-family:var(--mono);font-size:.72rem;color:var(--muted);max-height:140px;overflow-y:auto;line-height:1.7}
-    .log-box.visible{display:block}
-    .log-ok{color:var(--green)}.log-warn{color:var(--yellow)}.log-err{color:var(--red)}
-
-    .result-card{display:none;background:var(--surface);border:1px solid var(--green);border-radius:12px;
-      padding:24px;margin-top:16px;animation:fadeUp .4s ease}
-    .result-card.visible{display:block}
-    @keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
-    .result-title{font-family:var(--display);font-size:1rem;font-weight:800;color:var(--green);margin-bottom:12px;display:flex;align-items:center;gap:8px}
-    .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:16px}
-    .stat-box{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center}
-    .stat-num{font-family:var(--display);font-size:1.4rem;font-weight:800;color:var(--text)}
-    .stat-lbl{font-family:var(--mono);font-size:.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
-
-    /* ── revisão ── */
-    .rev-wrap{display:none;margin-top:20px}.rev-wrap.visible{display:block}
-    .rev-scroll{overflow-x:auto;margin-bottom:16px;border:1px solid var(--border);border-radius:8px}
-    .rev-table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:.7rem;min-width:1100px}
-    .rev-table th{background:var(--surface2);color:var(--accent);font-size:.62rem;font-weight:500;
-      text-transform:uppercase;letter-spacing:.08em;padding:8px 6px;text-align:left;position:sticky;top:0;white-space:nowrap}
-    .rev-table td{padding:5px 6px;border-top:1px solid var(--border);vertical-align:top}
-    .rev-table tr:hover{background:rgba(47,129,247,.04)}
-    .rev-table tr.row-warn{background:rgba(210,153,34,.06)}
-    .rev-table input{background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);
-      font-family:var(--mono);font-size:.7rem;padding:3px 5px;width:100%;outline:none}
-    .rev-table input:focus{border-color:var(--accent)}
-    .rev-table input.cpf-missing{border-color:var(--yellow)}
-    .rev-table input.cpf-ok{border-color:var(--green)}
-    .rev-table input[type="checkbox"]{width:16px;height:16px;accent-color:var(--accent);cursor:pointer}
-    .rev-table .row-cancelada{opacity:.5}
-    .rev-table select{background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:var(--mono);font-size:.7rem;padding:3px 4px}
-    .rev-issues{font-size:.58rem;color:var(--yellow);line-height:1.3}
-    .cpf-alert{background:rgba(210,153,34,.08);border:1px solid var(--yellow);border-radius:8px;
-      padding:12px 16px;margin-bottom:12px;font-family:var(--mono);font-size:.72rem;color:var(--yellow)}
-    .stock-alert{background:rgba(248,81,73,.08);border:1px solid var(--red);border-radius:8px;
-      padding:12px 16px;margin-bottom:12px;font-family:var(--mono);font-size:.72rem;color:var(--red)}
-    .sel-bar{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
-    .sel-count{font-family:var(--mono);font-size:.68rem;color:var(--accent)}
-    .filter-bar{display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
-    .filter-bar input{background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);
-      font-family:var(--mono);font-size:.75rem;padding:6px 10px;width:200px;outline:none}
-    .filter-bar input:focus{border-color:var(--accent)}
-    .filter-bar select{background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);
-      font-family:var(--mono);font-size:.75rem;padding:6px 8px}
-
-    /* ── movimentos ── */
-    .mov-toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
-    .mov-toolbar select{background:var(--surface2);border:1px solid var(--border);border-radius:8px;
-      color:var(--text);font-family:var(--mono);font-size:.82rem;padding:8px 12px}
-    .mov-form{display:grid;grid-template-columns:120px 1fr 100px 100px auto;gap:8px;align-items:end;margin-bottom:16px}
-    @media(max-width:700px){.mov-form{grid-template-columns:1fr 1fr}}
-    .mov-form label{font-family:var(--mono);font-size:.65rem;color:var(--muted);text-transform:uppercase;display:block;margin-bottom:4px}
-    .mov-form input,.mov-form select{background:var(--bg);border:1px solid var(--border);border-radius:6px;
-      color:var(--text);font-family:var(--mono);font-size:.78rem;padding:7px 8px;width:100%}
-    .mov-table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:.72rem}
-    .mov-table th{background:var(--surface2);color:var(--accent);font-size:.62rem;font-weight:500;
-      text-transform:uppercase;letter-spacing:.08em;padding:8px 8px;text-align:left}
-    .mov-table td{padding:6px 8px;border-top:1px solid var(--border)}
-    .mov-table tr:hover{background:rgba(47,129,247,.04)}
-    .mov-tag{font-size:.6rem;padding:2px 6px;border-radius:4px;font-weight:500;display:inline-block}
-    .mov-tag-entrada{background:rgba(63,185,80,.15);color:var(--green)}
-    .mov-tag-saida{background:rgba(47,129,247,.15);color:var(--accent)}
-    .mov-tag-perda{background:rgba(248,81,73,.15);color:var(--red)}
-    .mov-saldo-neg{color:var(--red);font-weight:700}
-    .mov-resumo{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px}
-
-    /* ── histórico ── */
-    .hist-empty{text-align:center;padding:48px 24px;color:var(--muted);font-family:var(--mono);font-size:.8rem}
-    .hist-entry{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 20px;margin-bottom:12px;transition:.2s}
-    .hist-entry:hover{border-color:var(--accent)}
-    .hist-header{display:flex;align-items:center;gap:12px;margin-bottom:8px}
-    .hist-periodo{font-family:var(--display);font-size:.9rem;font-weight:700;color:var(--text)}
-    .hist-date{font-family:var(--mono);font-size:.7rem;color:var(--muted);margin-left:auto}
-    .hist-substs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
-    .hist-pill{font-family:var(--mono);font-size:.65rem;background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:3px 10px;color:var(--muted)}
-    .hist-pill span{color:var(--green)}
-    .hist-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-    .hist-toolbar{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
-
-    .spinner{width:18px;height:18px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
-    @keyframes spin{to{transform:rotate(360deg)}}
-
-    .steps-info{display:flex;flex-direction:column;gap:10px}
-    .step-info{display:flex;align-items:flex-start;gap:14px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
-    .step-num-i{width:26px;height:26px;background:var(--accent);border-radius:50%;display:grid;place-items:center;font-family:var(--mono);font-size:.72rem;flex-shrink:0;margin-top:1px}
-    .step-title-i{font-family:var(--display);font-size:.82rem;font-weight:700;margin-bottom:3px}
-    .step-desc-i{font-size:.78rem;color:var(--muted);line-height:1.5}
-    code{font-family:var(--mono);background:var(--surface2);border:1px solid var(--border);padding:1px 6px;border-radius:4px;font-size:.8em;color:var(--accent2)}
-    footer{margin-top:48px;text-align:center;font-family:var(--mono);font-size:.7rem;color:var(--muted)}
-
-    .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;justify-content:center;align-items:center}
-    .modal-overlay.active{display:flex}
-    .modal{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:28px;max-width:650px;width:90%;max-height:80vh;overflow-y:auto}
-    .modal h3{font-family:var(--display);font-size:1rem;font-weight:800;margin-bottom:16px}
-    .modal-close{float:right;background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer}
-
-    #print-area{display:none}
-    @media print{
-      *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
-      body{background:#fff!important;color:#000!important}
-      body::before{display:none!important}
-      .wrapper{display:none!important}
-      #print-area{display:block!important;padding:0;margin:0}
-      .print-corpo{font-family:Arial,sans-serif;font-size:8pt;page-break-after:always}
-      .print-corpo h2{font-size:10pt;text-align:center;margin-bottom:2mm}
-      .print-corpo h3{font-size:9pt;text-align:center;margin-bottom:4mm;font-weight:normal}
-      .print-corpo table{width:100%;border-collapse:collapse}
-      .print-corpo th,.print-corpo td{border:1px solid #000;padding:2px 3px;text-align:center;font-size:7pt}
-      .print-corpo th{background:#e0e0e0;font-weight:bold;font-size:6.5pt}
-      .print-corpo .col-info{text-align:left;font-size:6.5pt;max-width:50mm;word-wrap:break-word}
-      .print-corpo .col-data{white-space:nowrap;font-size:6.5pt}
-      .print-corpo .row-est{background:#f0f0f0;font-weight:bold}
-      .print-etiquetas{font-family:Arial,sans-serif}
-      .etq-page{width:210mm;height:297mm;padding:6mm 4mm;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(5,1fr);gap:1.5mm;page-break-after:always}
-      .etq-page:last-child{page-break-after:auto}
-      .etq{border:1px solid #999;border-radius:1.5mm;padding:2mm 2.5mm;display:flex;flex-direction:column;justify-content:center;font-size:6.5pt;line-height:1.35;overflow:hidden}
-      .etq strong{font-size:6.5pt}
-      .etq .etq-subst{font-size:7.5pt;font-weight:bold;border-bottom:1px solid #ccc;padding-bottom:.5mm;margin-bottom:.5mm}
-      .etq .etq-field{margin-bottom:.3mm}
-      .etq .etq-rt{margin-top:auto;border-top:1px solid #ccc;padding-top:1mm;font-size:6pt;display:flex;justify-content:space-between;align-items:center}
-      .etq .etq-rt-line{border-bottom:1px solid #000;width:30mm;display:inline-block;height:3mm}
-      .print-etiquetas-linear{font-family:Arial,sans-serif;padding:5mm}
-      .etq-linear{border:1px solid #999;border-radius:1.5mm;padding:2mm 3mm;margin-bottom:1.5mm;font-size:7pt;line-height:1.3;page-break-inside:avoid;display:grid;grid-template-columns:1fr auto;gap:0 3mm}
-      .etq-linear .etq-l-top{display:flex;gap:3mm;flex-wrap:wrap;grid-column:1/3;border-bottom:1px solid #ddd;padding-bottom:1mm;margin-bottom:1mm}
-      .etq-linear .etq-l-top strong{font-size:7.5pt}
-      .etq-linear .etq-l-body{display:flex;gap:3mm;flex-wrap:wrap}
-      .etq-linear .etq-l-rt{text-align:right;display:flex;align-items:center;gap:2mm;font-size:6.5pt}
-      .etq-linear .etq-l-rt-line{border-bottom:1px solid #000;width:25mm;display:inline-block;height:3mm}
-      .print-resumo{font-family:Arial,sans-serif;font-size:9pt;padding:10mm}
-      .print-resumo h2{text-align:center;font-size:12pt;margin-bottom:3mm}
-      .print-resumo h3{text-align:center;font-size:10pt;font-weight:normal;margin-bottom:6mm}
-      .print-resumo table{width:100%;border-collapse:collapse;margin-bottom:6mm}
-      .print-resumo th,.print-resumo td{border:1px solid #000;padding:3px 5px;font-size:8pt}
-      .print-resumo th{background:#e0e0e0;font-weight:bold}
-      .print-resumo .sig-area{margin-top:20mm;display:flex;justify-content:space-around}
-      .print-resumo .sig-line{text-align:center;width:70mm}
-      .print-resumo .sig-line hr{border:none;border-top:1px solid #000;margin-bottom:2mm}
-    }
-  </style>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Controlados · Fórmula Animal v4</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0d1117;--sf:#161b22;--sf2:#21262d;--bd:#30363d;--ac:#2f81f7;--ac2:#388bfd;--gn:#3fb950;--yw:#d29922;--rd:#f85149;--tx:#e6edf3;--mt:#8b949e;--mono:'DM Mono',monospace;--sans:'DM Sans',sans-serif;--dsp:'Plus Jakarta Sans',sans-serif}
+body{background:var(--bg);color:var(--tx);font-family:var(--sans);min-height:100vh}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(var(--bd) 1px,transparent 1px),linear-gradient(90deg,var(--bd) 1px,transparent 1px);background-size:48px 48px;opacity:.12;pointer-events:none;z-index:0}
+.wr{position:relative;z-index:1;max-width:1020px;margin:0 auto;padding:40px 20px 80px}
+header{display:flex;align-items:center;gap:14px;margin-bottom:36px}
+.logo{width:44px;height:44px;background:var(--ac);border-radius:11px;display:grid;place-items:center;box-shadow:0 0 20px rgba(47,129,247,.4)}
+.logo svg{width:24px;height:24px}
+.hdr h1{font-family:var(--dsp);font-size:1.35rem;font-weight:800;letter-spacing:-.02em}
+.hdr p{font-size:.75rem;color:var(--mt);font-family:var(--mono);margin-top:1px}
+.vtag{margin-left:auto;font-family:var(--mono);font-size:.68rem;color:var(--mt);background:var(--sf2);border:1px solid var(--bd);padding:3px 9px;border-radius:16px}
+.reminder{display:none;background:rgba(210,153,34,.1);border:1px solid var(--yw);border-radius:9px;padding:10px 16px;margin-bottom:16px;font-family:var(--mono);font-size:.72rem;color:var(--yw);align-items:center;gap:8px}
+.reminder.v{display:flex}
+.reminder button{margin-left:auto;flex-shrink:0}
+.tabs{display:flex;gap:3px;margin-bottom:20px;background:var(--sf);border:1px solid var(--bd);border-radius:9px;padding:3px}
+.tab{flex:1;padding:9px 10px;border:none;background:0;color:var(--mt);font-family:var(--dsp);font-size:.76rem;font-weight:700;border-radius:6px;cursor:pointer;transition:.2s}
+.tab.a{background:var(--ac);color:#fff;box-shadow:0 2px 10px rgba(47,129,247,.4)}
+.tp{display:none}.tp.a{display:block}
+.sl{font-family:var(--mono);font-size:.68rem;font-weight:500;letter-spacing:.11em;text-transform:uppercase;color:var(--ac);margin-bottom:10px;margin-top:18px}
+.sl:first-child{margin-top:0}
+.cd{background:var(--sf);border:1px solid var(--bd);border-radius:11px;padding:20px;margin-bottom:14px}
+.ugrid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}@media(max-width:560px){.ugrid{grid-template-columns:1fr}}
+.dz{position:relative;border:2px dashed var(--bd);border-radius:9px;padding:20px 14px;text-align:center;cursor:pointer;transition:.2s}
+.dz:hover,.dz.dov{border-color:var(--ac);background:rgba(47,129,247,.06)}
+.dz.rdy{border-color:var(--gn);background:rgba(63,185,80,.06)}
+.dz input[type="file"]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.dz .di{font-size:1.6rem;margin-bottom:4px;display:block}
+.dz .dl{font-family:var(--dsp);font-size:.8rem;font-weight:700;display:block;margin-bottom:2px}
+.dz .dh{font-size:.68rem;color:var(--mt);font-family:var(--mono)}
+.dz .df{margin-top:5px;font-family:var(--mono);font-size:.68rem;color:var(--gn);word-break:break-all}
+.fr{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}@media(max-width:560px){.fr{grid-template-columns:1fr}}
+.fd label{display:block;font-family:var(--mono);font-size:.68rem;color:var(--mt);text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px}
+.fd input,.fd select{width:100%;background:var(--sf2);border:1px solid var(--bd);border-radius:7px;color:var(--tx);font-family:var(--mono);font-size:.8rem;padding:7px 10px;outline:0;transition:.2s}
+.fd input:focus,.fd select:focus{border-color:var(--ac)}
+.bp{display:flex;align-items:center;gap:9px;background:var(--ac);color:#fff;font-family:var(--dsp);font-size:.88rem;font-weight:700;border:none;border-radius:9px;padding:12px 24px;cursor:pointer;width:100%;justify-content:center;transition:.2s;box-shadow:0 3px 16px rgba(47,129,247,.35)}
+.bp:hover:not(:disabled){background:var(--ac2);transform:translateY(-1px)}.bp:disabled{opacity:.4;cursor:not-allowed;box-shadow:none}
+.bs{display:inline-flex;align-items:center;gap:7px;background:var(--sf2);color:var(--tx);font-family:var(--dsp);font-size:.78rem;font-weight:700;border:1px solid var(--bd);border-radius:7px;padding:8px 14px;cursor:pointer;transition:.2s}
+.bs:hover{border-color:var(--ac);color:var(--ac)}
+.bg{display:flex;align-items:center;gap:9px;background:var(--gn);color:#0d1117;font-family:var(--dsp);font-size:.88rem;font-weight:800;border:none;border-radius:9px;padding:12px 24px;cursor:pointer;width:100%;justify-content:center;box-shadow:0 3px 16px rgba(63,185,80,.3)}
+.bd{background:0;border:1px solid var(--rd);color:var(--rd);font-family:var(--mono);font-size:.7rem;border-radius:5px;padding:4px 10px;cursor:pointer;transition:.2s}.bd:hover{background:var(--rd);color:#fff}
+.bsm{font-size:.7rem;padding:5px 10px}
+.brow{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}
+.pw{display:none;margin-top:14px}.pw.v{display:block}
+.pt{height:3px;background:var(--sf2);border-radius:3px;overflow:hidden;margin-bottom:6px}
+.pb{height:100%;width:0%;background:linear-gradient(90deg,var(--ac),var(--gn));border-radius:3px;transition:width .3s}
+.ptx{font-family:var(--mono);font-size:.7rem;color:var(--mt)}
+.lb{display:none;background:var(--sf2);border:1px solid var(--bd);border-radius:7px;padding:10px 14px;margin-top:10px;font-family:var(--mono);font-size:.7rem;color:var(--mt);max-height:120px;overflow-y:auto;line-height:1.6}
+.lb.v{display:block}
+.lok{color:var(--gn)}.lw{color:var(--yw)}.le{color:var(--rd)}
+/* ── Review table ── */
+.rw{display:none;margin-top:18px}.rw.v{display:block}
+.rsc{overflow-x:auto;border:1px solid var(--bd);border-radius:7px}
+.rt{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:.68rem;min-width:1100px}
+.rt th{background:var(--sf2);color:var(--ac);font-size:.6rem;font-weight:500;text-transform:uppercase;letter-spacing:.08em;padding:7px 5px;text-align:left;position:sticky;top:0;white-space:nowrap}
+.rt td{padding:4px 5px;border-top:1px solid var(--bd);vertical-align:top}
+.rt tr:hover{background:rgba(47,129,247,.04)}
+.rt tr.rw-w{background:rgba(210,153,34,.06)}
+.rt tr.rw-c{opacity:.45}
+.rt input{background:var(--bg);border:1px solid var(--bd);border-radius:3px;color:var(--tx);font-family:var(--mono);font-size:.68rem;padding:2px 4px;width:100%;outline:0}
+.rt input:focus{border-color:var(--ac)}
+.rt input[type="checkbox"]{width:15px;height:15px;accent-color:var(--ac);cursor:pointer}
+.rt select{background:var(--bg);border:1px solid var(--bd);border-radius:3px;color:var(--tx);font-family:var(--mono);font-size:.68rem;padding:2px 3px}
+.ri{font-size:.56rem;color:var(--yw);line-height:1.2}
+.alert-y{background:rgba(210,153,34,.08);border:1px solid var(--yw);border-radius:7px;padding:10px 14px;margin-bottom:10px;font-family:var(--mono);font-size:.7rem;color:var(--yw)}
+.alert-r{background:rgba(248,81,73,.08);border:1px solid var(--rd);border-radius:7px;padding:10px 14px;margin-bottom:10px;font-family:var(--mono);font-size:.7rem;color:var(--rd)}
+.fbar{display:flex;gap:7px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
+.fbar input,.fbar select{background:var(--bg);border:1px solid var(--bd);border-radius:5px;color:var(--tx);font-family:var(--mono);font-size:.72rem;padding:5px 8px}
+.sbar{display:flex;gap:7px;align-items:center;margin-bottom:7px;flex-wrap:wrap}
+.scnt{font-family:var(--mono);font-size:.66rem;color:var(--ac)}
+/* ── Movimentos tab ── */
+.mv-tb{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+.mv-tb select{background:var(--sf2);border:1px solid var(--bd);border-radius:7px;color:var(--tx);font-family:var(--mono);font-size:.8rem;padding:7px 10px}
+.mv-res{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:14px}
+.sbox{background:var(--sf2);border:1px solid var(--bd);border-radius:7px;padding:10px;text-align:center}
+.snum{font-family:var(--dsp);font-size:1.2rem;font-weight:800}
+.slbl{font-family:var(--mono);font-size:.6rem;color:var(--mt);text-transform:uppercase;letter-spacing:.08em}
+.mv-frm{display:grid;grid-template-columns:110px 1fr 90px 90px 90px 90px auto;gap:6px;align-items:end;margin-bottom:14px}
+@media(max-width:700px){.mv-frm{grid-template-columns:1fr 1fr}}
+.mv-frm label{font-family:var(--mono);font-size:.62rem;color:var(--mt);text-transform:uppercase;display:block;margin-bottom:3px}
+.mv-frm input,.mv-frm select{background:var(--bg);border:1px solid var(--bd);border-radius:5px;color:var(--tx);font-family:var(--mono);font-size:.76rem;padding:6px 7px;width:100%}
+.mt{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:.7rem}
+.mt th{background:var(--sf2);color:var(--ac);font-size:.6rem;font-weight:500;text-transform:uppercase;letter-spacing:.08em;padding:7px 6px;text-align:left}
+.mt td{padding:5px 6px;border-top:1px solid var(--bd)}
+.mt tr:hover{background:rgba(47,129,247,.04)}
+.mt input[type="checkbox"]{width:15px;height:15px;accent-color:var(--ac);cursor:pointer}
+.mtag{font-size:.58rem;padding:2px 5px;border-radius:3px;font-weight:500;display:inline-block}
+.me{background:rgba(63,185,80,.15);color:var(--gn)}.ms{background:rgba(47,129,247,.15);color:var(--ac)}.mp{background:rgba(248,81,73,.15);color:var(--rd)}
+.msneg{color:var(--rd);font-weight:700}
+/* ── Histórico ── */
+.he{text-align:center;padding:40px 20px;color:var(--mt);font-family:var(--mono);font-size:.78rem}
+.hi{background:var(--sf);border:1px solid var(--bd);border-radius:9px;padding:14px 18px;margin-bottom:10px;transition:.2s}
+.hi:hover{border-color:var(--ac)}
+.hh{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.hp{font-family:var(--dsp);font-size:.88rem;font-weight:700}
+.hd{font-family:var(--mono);font-size:.68rem;color:var(--mt);margin-left:auto}
+.hs{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
+.hpl{font-family:var(--mono);font-size:.63rem;background:var(--sf2);border:1px solid var(--bd);border-radius:16px;padding:2px 8px;color:var(--mt)}
+.hpl span{color:var(--gn)}
+.ha{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite;flex-shrink:0}
+@keyframes sp{to{transform:rotate(360deg)}}
+/* ── Modal ── */
+.mo{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;justify-content:center;align-items:center}
+.mo.a{display:flex}
+.ml{background:var(--sf);border:1px solid var(--bd);border-radius:12px;padding:24px;max-width:650px;width:90%;max-height:80vh;overflow-y:auto}
+.ml h3{font-family:var(--dsp);font-size:.95rem;font-weight:800;margin-bottom:14px}
+.mc{float:right;background:0;border:0;color:var(--mt);font-size:1.1rem;cursor:pointer}
+code{font-family:var(--mono);background:var(--sf2);border:1px solid var(--bd);padding:1px 5px;border-radius:3px;font-size:.78em;color:var(--ac2)}
+footer{margin-top:40px;text-align:center;font-family:var(--mono);font-size:.68rem;color:var(--mt)}
+#print-area{display:none}
+@media print{
+  *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+  body{background:#fff!important;color:#000!important}body::before{display:none!important}
+  .wr{display:none!important}#print-area{display:block!important;padding:0;margin:0}
+  .pr-corpo{font-family:Arial,sans-serif;font-size:8pt;page-break-after:always}
+  .pr-corpo h2{font-size:10pt;text-align:center;margin-bottom:2mm}
+  .pr-corpo h3{font-size:9pt;text-align:center;margin-bottom:4mm;font-weight:normal}
+  .pr-corpo table{width:100%;border-collapse:collapse}
+  .pr-corpo th,.pr-corpo td{border:1px solid #000;padding:2px 3px;text-align:center;font-size:7pt}
+  .pr-corpo th{background:#e0e0e0;font-weight:bold;font-size:6.5pt}
+  .pr-corpo .ci{text-align:left;font-size:6.5pt;max-width:42mm;word-wrap:break-word}
+  .pr-corpo .cd{white-space:nowrap;font-size:6.5pt}
+  .pr-corpo .re{background:#f0f0f0;font-weight:bold}
+  .pr-corpo .crt{width:14mm}
+  .pr-etq{font-family:Arial,sans-serif}
+  .eq-page{width:210mm;height:297mm;padding:6mm 4mm;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(5,1fr);gap:1.5mm;page-break-after:always}
+  .eq-page:last-child{page-break-after:auto}
+  .eq{border:1px solid #999;border-radius:1.5mm;padding:2mm 2.5mm;display:flex;flex-direction:column;justify-content:center;font-size:6.5pt;line-height:1.3;overflow:hidden}
+  .eq strong{font-size:6.5pt}
+  .eq .eq-s{font-size:7.5pt;font-weight:bold;border-bottom:1px solid #ccc;padding-bottom:.5mm;margin-bottom:.5mm}
+  .eq .eq-f{margin-bottom:.3mm}
+  .eq .eq-rt{margin-top:auto;border-top:1px solid #ccc;padding-top:1mm;font-size:6pt;display:flex;justify-content:space-between;align-items:center}
+  .eq .eq-rl{border-bottom:1px solid #000;width:28mm;display:inline-block;height:3mm}
+  .pr-etql{font-family:Arial,sans-serif;padding:5mm}
+  .eql{border:1px solid #999;border-radius:1.5mm;padding:2mm 3mm;margin-bottom:1.5mm;font-size:7pt;line-height:1.3;page-break-inside:avoid;display:grid;grid-template-columns:1fr auto;gap:0 3mm}
+  .eql .eql-t{display:flex;gap:3mm;flex-wrap:wrap;grid-column:1/3;border-bottom:1px solid #ddd;padding-bottom:1mm;margin-bottom:1mm}
+  .eql .eql-t strong{font-size:7.5pt}
+  .eql .eql-b{display:flex;gap:3mm;flex-wrap:wrap}
+  .eql .eql-r{text-align:right;display:flex;align-items:center;gap:2mm;font-size:6.5pt}
+  .eql .eql-rl{border-bottom:1px solid #000;width:25mm;display:inline-block;height:3mm}
+  .pr-anx{font-family:Arial,sans-serif;font-size:8pt;padding:8mm;page-break-after:always}
+  .pr-anx h2{font-size:11pt;text-align:center;margin-bottom:2mm}
+  .pr-anx h3{font-size:9pt;text-align:center;font-weight:normal;margin-bottom:5mm}
+  .pr-anx h4{font-size:9pt;margin-top:5mm;margin-bottom:2mm}
+  .pr-anx table{width:100%;border-collapse:collapse;margin-bottom:4mm}
+  .pr-anx th,.pr-anx td{border:1px solid #000;padding:2px 4px;font-size:7.5pt}
+  .pr-anx th{background:#e0e0e0;font-weight:bold;font-size:7pt}
+  .pr-anx .sig{margin-top:18mm;text-align:center}
+  .pr-anx .sig hr{border:none;border-top:1px solid #000;width:70mm;margin:0 auto 2mm}
+}
+</style>
 </head>
 <body>
-<div class="wrapper">
+<div class="wr">
+<div class="reminder" id="bkp-rem">⚠ Mais de 7 dias sem backup. <button class="bs bsm" onclick="exportarBackup()">Exportar</button><button class="bsm" style="background:0;border:0;color:var(--mt);cursor:pointer" onclick="this.parentElement.classList.remove('v')">✕</button></div>
+<header>
+<div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg></div>
+<div class="hdr"><h1>Controlados</h1><p>R S O MANIPULAÇÃO ANIMAL · GO 0198-8</p></div>
+<span class="vtag">v4.0</span>
+</header>
+<div class="tabs">
+<button class="tab a" onclick="swTab('imp',this)">Importar</button>
+<button class="tab" onclick="swTab('mov',this)">Movimentos</button>
+<button class="tab" onclick="swTab('hist',this)">Histórico</button>
+<button class="tab" onclick="swTab('help',this)">Ajuda</button>
+</div>
 
-  <!-- Lembrete de backup -->
-  <div class="reminder-bar" id="backup-reminder">
-    ⚠ Faz mais de 7 dias sem exportar backup. Proteja seus dados!
-    <button class="btn-secondary btn-sm" onclick="exportarBackup()">Exportar agora</button>
-    <button class="btn-sm" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.8rem" onclick="dismissReminder()">✕</button>
-  </div>
+<!-- ═══ TAB IMPORTAR ═══ -->
+<div class="tp a" id="tp-imp">
+<div class="sl">01 · Upload dos relatórios Farma Fácil</div>
+<div class="cd">
+<div class="ugrid">
+<div class="dz" id="z-m"><input type="file" id="f-m" accept=".xls,.xlsx"/><span class="di">📋</span><span class="dl">MOVIMENTO.XLS</span><span class="dh">Movimento Controlados Período</span><div class="df" id="fn-m"></div></div>
+<div class="dz" id="z-c"><input type="file" id="f-c" accept=".xls,.xlsx"/><span class="di">📄</span><span class="dl">CLIENTE_END.XLS</span><span class="dh">Registro de Receituário Geral</span><div class="df" id="fn-c"></div></div>
+</div>
+<div class="fr">
+<div class="fd"><label>Estabelecimento</label><input id="inp-estab" value="R S O MANIPULAÇÃO ANIMAL"/></div>
+<div class="fd"><label>Período (auto ao processar)</label><input id="inp-per" placeholder="Preenchido automaticamente"/></div>
+</div>
+</div>
+<button class="bp" id="btn-proc" disabled>Processar Dados</button>
 
-  <header>
-    <div class="logo-badge">
-      <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round">
-        <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/>
-        <rect x="9" y="3" width="6" height="4" rx="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/>
-      </svg>
-    </div>
-    <div class="header-text"><h1>Controlados</h1><p>R S O Manipulação Animal · GO 0198-8</p></div>
-    <span class="version-tag">v3.2</span>
-  </header>
+<div class="rw" id="rev-wr">
+<div class="sl">02 · Revisão dos dados cruzados</div>
+<div id="al-cpf" class="alert-y" style="display:none"></div>
+<div id="al-stk" class="alert-r" style="display:none"></div>
+<div id="al-val" class="alert-y" style="display:none"></div>
+<div class="cd" style="padding:10px">
+<div class="fbar"><input type="text" id="flt-txt" placeholder="Filtrar tutor, prescritor, OM..." oninput="renderRev()"/><select id="flt-sub" onchange="renderRev()"><option value="">Todas substâncias</option></select></div>
+<div class="sbar">
+<button class="bs bsm" onclick="selAll(true)">☑ Todos</button>
+<button class="bs bsm" onclick="selAll(false)">☐ Limpar</button>
+<span class="scnt" id="sel-cnt"></span>
+</div>
+<div class="rsc" style="max-height:50vh;overflow-y:auto"><table class="rt" id="rev-tbl"></table></div>
+<div class="brow" style="justify-content:space-between"><div style="display:flex;gap:6px"><button class="bs bsm" onclick="openModal('cpf')">CPFs</button><button class="bs bsm" onclick="openModal('presc')">Prescritores</button></div><div style="font-family:var(--mono);font-size:.66rem;color:var(--mt)" id="rev-cnt"></div></div>
+</div>
+<button class="bg" id="btn-confirm" style="margin-top:7px">✓ Confirmar Importação → Movimentos</button>
+</div>
 
-  <div class="tabs">
-    <button class="tab active" onclick="switchTab('gerar',this)">Gerar</button>
-    <button class="tab" onclick="switchTab('movimentos',this)">Movimentos</button>
-    <button class="tab" onclick="switchTab('historico',this)">Histórico</button>
-    <button class="tab" onclick="switchTab('ajuda',this)">Ajuda</button>
-  </div>
+<div class="pw" id="pw"><div class="pt"><div class="pb" id="pb"></div></div><div class="ptx" id="ptx">Aguardando...</div></div>
+<div class="lb" id="lb"></div>
+</div>
 
-  <!-- ══════════ TAB GERAR ══════════ -->
-  <div class="tab-panel active" id="tab-gerar">
-    <div class="section-label">01 · Importar relatórios do Farma Fácil</div>
-    <div class="card">
-      <div class="upload-grid">
-        <div class="drop-zone" id="zone-mov">
-          <input type="file" id="file-mov" accept=".xls,.xlsx" />
-          <span class="drop-icon">📋</span><span class="drop-label">MOVIMENTO.XLS</span>
-          <span class="drop-hint">Movimento Controlados Período</span>
-          <div class="drop-filename" id="fname-mov"></div>
-        </div>
-        <div class="drop-zone" id="zone-ce">
-          <input type="file" id="file-ce" accept=".xls,.xlsx" />
-          <span class="drop-icon">📄</span><span class="drop-label">CLIENTE_END.XLS</span>
-          <span class="drop-hint">Registro de Receituário Geral</span>
-          <div class="drop-filename" id="fname-ce"></div>
-        </div>
-      </div>
-      <div class="field-row">
-        <div class="field"><label>Estabelecimento</label><input type="text" id="estabelecimento" value="R S O MANIPULAÇÃO ANIMAL" /></div>
-        <div class="field"><label>Período (preenchido automaticamente)</label><input type="text" id="periodo-label" placeholder="Preenchido ao processar" /></div>
-      </div>
-    </div>
+<!-- ═══ TAB MOVIMENTOS ═══ -->
+<div class="tp" id="tp-mov">
+<div class="sl">Movimentos por substância</div>
+<div class="cd">
+<div class="mv-tb">
+<div class="fd" style="margin-bottom:0;min-width:180px"><label>Substância</label><select id="mv-sub"></select></div>
+<div class="fd" style="margin-bottom:0"><label>Formato data impressão</label><select id="mv-dtfmt"><option value="unica">dd/mm/aaaa</option><option value="sep">DIA | MÊS | ANO</option></select></div>
+</div>
+<div class="mv-res" id="mv-res"></div>
 
-    <div class="section-label">02 · Estoque inicial por substância</div>
-    <div class="card">
-      <div id="est-grid" class="est-grid"></div>
-      <p style="font-size:.75rem;color:var(--muted);font-family:var(--mono)">↑ Valores do estoque final do último período. Ajuste se necessário.</p>
-    </div>
+<div class="sl" style="margin-top:6px">Lançamentos</div>
+<div class="sbar">
+<button class="bs bsm" onclick="mvSelAll(true)">☑ Todos</button>
+<button class="bs bsm" onclick="mvSelAll(false)">☐ Limpar</button>
+<span class="scnt" id="mv-sel-cnt"></span>
+</div>
+<div style="overflow-x:auto;margin-bottom:12px"><table class="mt" id="mv-tbl"></table></div>
 
-    <button class="btn-primary" id="btn-processar" disabled>
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-        <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
-      </svg>
-      Processar Dados
-    </button>
+<div class="brow" style="margin-top:0;margin-bottom:16px">
+<button class="bs bsm" onclick="printCorpo()">🖨 Corpo (Livro)</button>
+<button class="bs bsm" onclick="printEtq('grade')">🏷 Etq 3×5</button>
+<button class="bs bsm" onclick="printEtq('linear')">🏷 Etq Livro</button>
+<button class="bs bsm" onclick="printAnexoVII()">📋 Anexo VII</button>
+<button class="bs bsm" onclick="printAnexoVIII()">📋 Anexo VIII</button>
+</div>
 
-    <div class="rev-wrap" id="rev-wrap">
-      <div class="section-label">03 · Revisão dos dados cruzados</div>
-      <div id="cpf-alert" class="cpf-alert" style="display:none"></div>
-      <div id="stock-alert" class="stock-alert" style="display:none"></div>
-      <div id="validation-alert" class="cpf-alert" style="display:none"></div>
-      <div class="card" style="padding:12px">
-        <div class="filter-bar">
-          <input type="text" id="filter-text" placeholder="Filtrar por nome, prescritor..." oninput="filtrarRevisao()" />
-          <select id="filter-subst" onchange="filtrarRevisao()"><option value="">Todas substâncias</option></select>
-        </div>
-        <div class="sel-bar">
-          <button class="btn-secondary btn-sm" onclick="toggleSelectAll(true)">☑ Selecionar todos</button>
-          <button class="btn-secondary btn-sm" onclick="toggleSelectAll(false)">☐ Limpar</button>
-          <span class="sel-count" id="sel-count"></span>
-          <span style="margin-left:auto;font-size:.65rem;color:var(--muted);font-family:var(--mono)">Selecione para imprimir apenas estes</span>
-        </div>
-        <div class="rev-scroll" style="max-height:55vh;overflow-y:auto">
-          <table class="rev-table" id="rev-table"></table>
-        </div>
-        <div class="btn-row" style="justify-content:space-between">
-          <div style="display:flex;gap:8px">
-            <button class="btn-secondary btn-sm" onclick="abrirCPFModal()">CPFs</button>
-            <button class="btn-secondary btn-sm" onclick="abrirPrescritorModal()">Prescritores</button>
-          </div>
-          <div style="font-family:var(--mono);font-size:.68rem;color:var(--muted)" id="rev-count"></div>
-        </div>
-      </div>
+<div class="sl" style="margin-top:6px">Adicionar lançamento manual</div>
+<div class="mv-frm">
+<div><label>Tipo</label><select id="mv-tipo"><option value="entrada">Entrada</option><option value="perda">Perda</option></select></div>
+<div><label>Descrição (NF, motivo)</label><input id="mv-desc" placeholder="NF 12345 — Fornecedor"/></div>
+<div><label>Qtd (g)</label><input type="number" id="mv-qtd" step="0.0001" min="0"/></div>
+<div><label>Data</label><input type="date" id="mv-data"/></div>
+<div><label>Nº NF</label><input id="mv-nf" placeholder="12345"/></div>
+<div><label>CNPJ Forn.</label><input id="mv-cnpj" placeholder="00.000.000/0001-00"/></div>
+<button class="bs bsm" onclick="addMov()" style="height:32px;align-self:end">+ Adicionar</button>
+</div>
+</div>
+</div>
 
-      <button class="btn-primary" id="btn-gerar" style="margin-top:8px;background:var(--green);box-shadow:0 4px 20px rgba(63,185,80,.35)">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-          <path d="M9 12l2 2 4-4"/><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z"/>
-        </svg>
-        Gerar Planilha Final
-      </button>
-    </div>
+<!-- ═══ TAB HISTÓRICO ═══ -->
+<div class="tp" id="tp-hist">
+<div class="sl">Registros anteriores</div>
+<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+<button class="bs" onclick="exportarBackup()">⬇ Exportar backup</button>
+<label class="bs" style="cursor:pointer">⬆ Importar backup<input type="file" accept=".json" id="f-bkp" style="display:none" onchange="importarBackup(this)"/></label>
+</div>
+<div id="hist-list"></div>
+</div>
 
-    <div class="progress-wrap" id="progress-wrap">
-      <div class="progress-track"><div class="progress-bar" id="progress-bar"></div></div>
-      <div class="progress-text" id="progress-text">Aguardando...</div>
-    </div>
-    <div class="log-box" id="log-box"></div>
+<!-- ═══ TAB AJUDA ═══ -->
+<div class="tp" id="tp-help">
+<div class="sl">Passo a passo — v4.0</div>
+<div class="cd" style="line-height:1.7;font-size:.82rem;color:var(--mt)">
+<p><strong style="color:var(--tx)">1. Importar:</strong> Faça upload dos XLS do Farma Fácil, revise e confirme. Os dados vão direto para os Movimentos.</p>
+<p style="margin-top:8px"><strong style="color:var(--tx)">2. Movimentos (hub central):</strong> Visualize por substância, selecione registros, imprima Corpo, Etiquetas, Anexos VII e VIII. Adicione entradas (NF com CNPJ do fornecedor) e perdas.</p>
+<p style="margin-top:8px"><strong style="color:var(--tx)">3. Impressão:</strong> O Corpo inclui coluna ASSINATURA DO RT. "Outras informações" contém CPF do tutor (saídas) e dados do fornecedor (entradas), conforme Art. 11 §4 da IN 35/2017. Formato de data configurável.</p>
+<p style="margin-top:8px"><strong style="color:var(--tx)">4. CRMV com UF:</strong> Cadastro de prescritores salva CRMV + UF (ex: GO, SP). Formato impresso: "CRMV-GO 1234".</p>
+<p style="margin-top:8px"><strong style="color:var(--tx)">5. Estoque:</strong> O estoque inicial é automaticamente o saldo final dos movimentos. Edite apenas na abertura do semestre.</p>
+<p style="margin-top:8px"><strong style="color:var(--tx)">6. Backup:</strong> Exporte regularmente. O sistema avisa após 7 dias sem backup.</p>
+</div>
+<div class="cd" style="font-family:var(--mono);font-size:.7rem;color:var(--mt);line-height:1.6">
+⚠ Todos os dados (CPFs, endereços, prescritores, movimentos, histórico) ficam no <strong>localStorage</strong>. Não limpe os dados do navegador sem exportar backup.
+</div>
+</div>
 
-    <div class="result-card" id="result-card">
-      <div class="result-title">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
-        Planilha gerada com sucesso
-      </div>
-      <div class="stats-grid" id="stats-grid"></div>
-      <button class="btn-download" id="btn-download">⬇ Baixar Excel</button>
-      <div class="btn-row" style="margin-top:12px;align-items:end">
-        <div class="field" style="flex:1;max-width:220px"><label>Substância para Corpo</label><select id="print-subst-select"></select></div>
-        <button class="btn-secondary btn-sm" onclick="imprimirCorpo()">🖨 Corpo</button>
-        <button class="btn-secondary btn-sm" onclick="imprimirEtiquetas('grade')">🏷 Etq 3×5</button>
-        <button class="btn-secondary btn-sm" onclick="imprimirEtiquetas('linear')">🏷 Etq Livro</button>
-        <button class="btn-secondary btn-sm" onclick="imprimirResumoFiscalizacao()">📋 Resumo MAPA</button>
-      </div>
-    </div>
-  </div>
+<!-- ═══ MODAIS ═══ -->
+<div class="mo" id="mo-cpf"><div class="ml"><button class="mc" onclick="closeModal('cpf')">✕</button><h3>Cadastro de CPFs</h3><div id="cpf-list" style="max-height:50vh;overflow-y:auto"></div><div class="brow" style="margin-top:14px"><button class="bs bsm" onclick="closeModal('cpf')">Fechar</button><button class="bd" onclick="clearCad('cpf')" style="margin-left:auto">Limpar todos</button></div></div></div>
+<div class="mo" id="mo-presc"><div class="ml"><button class="mc" onclick="closeModal('presc')">✕</button><h3>Cadastro de Prescritores (CRMV + UF)</h3><div id="presc-list" style="max-height:50vh;overflow-y:auto"></div><div class="brow" style="margin-top:14px"><button class="bs bsm" onclick="closeModal('presc')">Fechar</button><button class="bd" onclick="clearCad('presc')" style="margin-left:auto">Limpar todos</button></div></div></div>
 
-  <!-- ══════════ TAB MOVIMENTOS ══════════ -->
-  <div class="tab-panel" id="tab-movimentos">
-    <div class="section-label">Movimentos por substância</div>
-    <div class="card">
-      <div class="mov-toolbar">
-        <div class="field" style="margin-bottom:0;min-width:200px"><label>Substância</label><select id="mov-subst"></select></div>
-      </div>
-      <div class="mov-resumo" id="mov-resumo"></div>
-      <div class="section-label" style="margin-top:8px">Adicionar lançamento</div>
-      <div class="mov-form" id="mov-form">
-        <div><label>Tipo</label><select id="mov-tipo"><option value="entrada">Entrada</option><option value="perda">Perda</option></select></div>
-        <div><label>Descrição (NF, motivo)</label><input type="text" id="mov-descricao" placeholder="NF 12345" /></div>
-        <div><label>Qtd (g)</label><input type="number" id="mov-qtd" step="0.0001" min="0" /></div>
-        <div><label>Data</label><input type="date" id="mov-data" /></div>
-        <button class="btn-secondary btn-sm" onclick="adicionarMovimento()" style="height:36px;align-self:end">+ Adicionar</button>
-      </div>
-      <div class="section-label">Lançamentos</div>
-      <div style="overflow-x:auto"><table class="mov-table" id="mov-table"></table></div>
-    </div>
-  </div>
-
-  <!-- ══════════ TAB HISTÓRICO ══════════ -->
-  <div class="tab-panel" id="tab-historico">
-    <div class="section-label">Registros anteriores</div>
-    <div class="hist-toolbar">
-      <button class="btn-secondary" onclick="exportarBackup()">⬇ Exportar backup</button>
-      <label class="btn-secondary" style="cursor:pointer">⬆ Importar backup<input type="file" accept=".json" id="file-backup" style="display:none" onchange="importarBackup(this)" /></label>
-    </div>
-    <div id="hist-lista"></div>
-  </div>
-
-  <!-- ══════════ TAB AJUDA ══════════ -->
-  <div class="tab-panel" id="tab-ajuda">
-    <div class="section-label">Passo a passo — v3.2</div>
-    <div class="steps-info">
-      <div class="step-info"><div class="step-num-i">1</div><div><div class="step-title-i">Exporte os relatórios</div><div class="step-desc-i">Exporte <code>Movimento Controlados Período</code> e <code>Registro de Receituário Geral</code> do Farma Fácil em <code>.XLS</code>.</div></div></div>
-      <div class="step-info"><div class="step-num-i">2</div><div><div class="step-title-i">Upload e Processar</div><div class="step-desc-i">Arraste os arquivos, confira estoques iniciais e clique em <strong>Processar Dados</strong>. O período é preenchido automaticamente. Tudo é convertido para MAIÚSCULAS.</div></div></div>
-      <div class="step-info"><div class="step-num-i">3</div><div><div class="step-title-i">Revise, filtre e complete</div><div class="step-desc-i">Na tabela de revisão, use os <strong>filtros</strong> para localizar registros. Alertas de <strong>validação</strong> indicam campos faltantes. CPFs, endereços e prescritores são salvos automaticamente.</div></div></div>
-      <div class="step-info"><div class="step-num-i">4</div><div><div class="step-title-i">Gere, baixe e imprima</div><div class="step-desc-i">Clique em <strong>Gerar Planilha Final</strong>. Use os botões de impressão: <strong>Corpo</strong>, <strong>Etiquetas</strong> (3×5 ou Livro) e <strong>Resumo MAPA</strong> para fiscalização. Selecione registros específicos com os checkboxes.</div></div></div>
-      <div class="step-info"><div class="step-num-i">5</div><div><div class="step-title-i">Movimentos manuais</div><div class="step-desc-i">Na aba <strong>Movimentos</strong>, registre entradas de matéria-prima (NF), perdas e edite saídas. O saldo recalcula em cascata.</div></div></div>
-      <div class="step-info"><div class="step-num-i">6</div><div><div class="step-title-i">Backup regular</div><div class="step-desc-i">Exporte o backup JSON regularmente. O sistema <strong>avisa após 7 dias</strong> sem backup. No histórico, reimprima qualquer período anterior.</div></div></div>
-    </div>
-    <div style="margin-top:20px;padding:16px;background:var(--surface2);border-radius:10px;border:1px solid var(--border)">
-      <p style="font-family:var(--mono);font-size:.72rem;color:var(--muted);line-height:1.7">
-        ⚠ O histórico, CPFs, endereços, prescritores e movimentos são salvos no <strong>localStorage</strong>. Não limpe os dados do site sem exportar o backup.
-      </p>
-    </div>
-  </div>
-
-  <!-- Modais -->
-  <div class="modal-overlay" id="cpf-modal">
-    <div class="modal"><button class="modal-close" onclick="fecharCPFModal()">✕</button>
-      <h3>Cadastro de CPFs</h3>
-      <p style="font-size:.75rem;color:var(--muted);margin-bottom:12px;font-family:var(--mono)">Preenchidos automaticamente nas próximas importações.</p>
-      <div id="cpf-lista" style="max-height:50vh;overflow-y:auto"></div>
-      <div class="btn-row" style="margin-top:16px"><button class="btn-secondary btn-sm" onclick="fecharCPFModal()">Fechar</button><button class="btn-danger" onclick="limparCadastro('cpf')" style="margin-left:auto">Limpar todos</button></div>
-    </div>
-  </div>
-  <div class="modal-overlay" id="prescritor-modal">
-    <div class="modal"><button class="modal-close" onclick="fecharPrescritorModal()">✕</button>
-      <h3>Cadastro de Prescritores</h3>
-      <p style="font-size:.75rem;color:var(--muted);margin-bottom:12px;font-family:var(--mono)">CRMV é preenchido automaticamente nas próximas importações.</p>
-      <div id="prescritor-lista" style="max-height:50vh;overflow-y:auto"></div>
-      <div class="btn-row" style="margin-top:16px"><button class="btn-secondary btn-sm" onclick="fecharPrescritorModal()">Fechar</button><button class="btn-danger" onclick="limparCadastro('prescritor')" style="margin-left:auto">Limpar todos</button></div>
-    </div>
-  </div>
-
-  <footer>
-    <p>R S O Manipulação Animal · Paulo Edson Fernandes — CRF-GO 9303 · GO 0198-8</p>
-    <p style="margin-top:4px">Processamento 100% local — nenhum dado é enviado a servidores</p>
-  </footer>
+<footer>
+<p>R S O Manipulação Animal · Paulo Edson Fernandes — CRF-GO 9303 · GO 0198-8</p>
+<p style="margin-top:3px">Processamento 100% local — nenhum dado enviado a servidores · IN 35/2017 MAPA</p>
+</footer>
 </div>
 <div id="print-area"></div>
 <script src="app.js"></script>
