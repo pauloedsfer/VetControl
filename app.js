@@ -621,9 +621,67 @@ function importarBackup(inp){
     if(data.enderecos)svE(data.enderecos);
     if(data.prescritores)svP(data.prescritores);
     if(data.movimentos)svM(data.movimentos);
+    // ── Migração v3→v4: enriquecer movimentos com dados de tutor/prescritor ──
+    migrateV3toV4(hist, data.cpfs||{}, data.enderecos||{}, data.prescritores||{});
     renderHist();alert('Backup importado!');
   }catch(err){alert('Erro: '+err.message);}};
   r.readAsText(file);inp.value='';
+}
+
+/** Migração: preenche tutor/cpf/prescritor nas saídas que não têm (backups v3 e anteriores) */
+function migrateV3toV4(hist, cpfs, enderecos, prescritores){
+  const movs=ldM();
+  let migrated=0;
+  // Construir mapa nrOm → dados de registros do histórico
+  const omMap={};
+  for(const reg of hist){
+    if(!reg.registros)continue;
+    for(const r of reg.registros){
+      if(r.nrOm&&r.status!=='CANCELADA'){
+        omMap[r.nrOm]={
+          tutor:up(r.clienteFull||r.tutor||''),
+          cpf:r.cpf||'',
+          endereco:up(r.endereco||''),
+          prescritor:up(r.prescritor||''),
+          crmvNr:r.crmvNrCE||r.crmvNr||'',
+          crmvUf:r.crmvUf||'GO',
+          calculo:up(r.calculo||''),
+          doseMg:r.doseMg||'',
+          nrReceita:r.nrReceita||'',
+          substancia:up(r.substancia||''),
+          lista:up(r.lista||''),
+        };
+      }
+    }
+  }
+  // Enriquecer cada saída sem tutor
+  for(const sn of Object.keys(movs)){
+    const s=movs[sn];if(!s||!s.lancamentos)continue;
+    for(const l of s.lancamentos){
+      if(l.tipo!=='saida')continue;
+      if(l.tutor&&l.tutor.length>1)continue;// já tem dados
+      // Tentar pelo nrOm nos registros do histórico
+      const om=omMap[l.nrOm];
+      if(om){
+        l.tutor=om.tutor;l.cpf=om.cpf;l.endereco=om.endereco;
+        l.prescritor=om.prescritor;l.crmvNr=om.crmvNr;l.crmvUf=om.crmvUf;
+        l.calculo=om.calculo;l.doseMg=om.doseMg;l.nrReceita=om.nrReceita;
+        l.substancia=om.substancia;l.lista=om.lista;
+        migrated++;
+      } else {
+        // Sem registros — tentar preencher CPF/endereço pelo cadastro se tutor existir parcialmente
+        if(l.tutor){
+          const k=nn(l.tutor);
+          if(!l.cpf&&cpfs[k])l.cpf=cpfs[k];
+          if(!l.endereco&&enderecos[k])l.endereco=enderecos[k];
+        }
+      }
+    }
+  }
+  if(migrated>0){
+    svM(movs);
+    console.log('Migração v3→v4: '+migrated+' saídas enriquecidas com dados de tutor/prescritor');
+  }
 }
 
 // ═══ INIT ═══
@@ -631,3 +689,13 @@ setupDZ('z-m','f-m','fn-m','m');
 setupDZ('z-c','f-c','fn-c','c');
 document.getElementById('mv-sub').innerHTML=SUB.map(s=>'<option value="'+s.n+'">'+s.n+' ('+s.l+')</option>').join('');
 chkBkp();
+// Auto-migrar dados v3 se necessário
+(function(){
+  const movs=ldM();let need=false;
+  for(const sn of Object.keys(movs)){
+    const s=movs[sn];if(!s||!s.lancamentos)continue;
+    for(const l of s.lancamentos){if(l.tipo==='saida'&&l.nrOm&&(!l.tutor||l.tutor.length<2)){need=true;break;}}
+    if(need)break;
+  }
+  if(need){console.log('Detectados movimentos v3 sem dados de tutor. Executando migração...');migrateV3toV4(ldH(),ldC(),ldE(),ldP());}
+})();
