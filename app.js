@@ -48,10 +48,10 @@ function setC(n,v){if(!n)return;const c=ldC();if(v&&v.trim())c[nn(n)]=v.trim();e
 const ldE=()=>ls(K.e,{});const svE=e=>sv(K.e,e);
 const getE=n=>ldE()[nn(n)]||'';
 function setE(n,v){if(!n)return;const e=ldE();if(v&&v.trim())e[nn(n)]=up(v);else delete e[nn(n)];svE(e);}
-// Prescritor {crmv,uf}
+// Prescritor {crmv,uf,cadMapa}
 const ldP=()=>ls(K.p,{});const svP=p=>sv(K.p,p);
 const getP=n=>ldP()[nn(n)]||{};
-function setP2(n,crmv,uf){if(!n)return;const p=ldP();p[nn(n)]={crmv:String(crmv||'').trim(),uf:up(uf)||'GO'};svP(p);}
+function setP2(n,crmv,uf,cadMapa){if(!n)return;const p=ldP();p[nn(n)]={crmv:String(crmv||'').trim(),uf:up(uf)||'GO',cadMapa:String(cadMapa||'').trim()};svP(p);}
 // Movimentos
 const ldM=()=>ls(K.m,{});const svM=m=>sv(K.m,m);
 function getSM(n){const a=ldM();if(!a[n])a[n]={estoqueInicial:0,lancamentos:[]};return a[n];}
@@ -149,8 +149,9 @@ function cruzar(movs,ced){
     const pCad=getP(prescritor);
     const crmvFinal=crmvNr||pCad.crmv||'';
     const uf=pCad.uf||'GO';
+    const cadMapa=pCad.cadMapa||'';
     return{...m,substancia:up(m.substancia),lista:up(m.lista),clienteFull:tutor,endereco,cpf,
-      prescritor,crmvNr:crmvFinal,crmvUf:uf,calculo:up(m.calculo),
+      prescritor,crmvNr:crmvFinal,crmvUf:uf,cadMapa,calculo:up(m.calculo),
       qtdeTexto:ce.qtdeTexto||'',doseMg:ce.doseMg||'',
       status:up(ce.status||'ATIVA'),_sel:false,_issues:[]};
   });
@@ -218,7 +219,7 @@ function renderRev(){
   const alC=document.getElementById('al-cpf');
   if(semCPF.length>0){alC.innerHTML='⚠ '+[...new Set(semCPF.map(d=>d.clienteFull))].length+' tutor(es) sem CPF.';alC.style.display='block';}else alC.style.display='none';
 
-  let h='<thead><tr><th style="width:28px"><input type="checkbox" onchange="selAll(this.checked)"/></th><th>#</th><th>Substância</th><th>Data</th><th>OM</th><th>Doc</th><th style="min-width:120px">Tutor</th><th style="min-width:100px">CPF</th><th style="min-width:140px">Endereço</th><th style="min-width:110px">Prescritor</th><th>CRMV</th><th>UF</th><th style="min-width:90px">Concentração</th><th>Qtd(g)</th><th>Receita</th><th>St</th><th></th></tr></thead><tbody>';
+  let h='<thead><tr><th style="width:28px"><input type="checkbox" onchange="selAll(this.checked)"/></th><th>#</th><th>Substância</th><th>Data</th><th>OM</th><th>Doc</th><th style="min-width:120px">Tutor</th><th style="min-width:100px">CPF</th><th style="min-width:140px">Endereço</th><th style="min-width:110px">Prescritor</th><th>CRMV</th><th>UF</th><th>Cad.MAPA</th><th style="min-width:90px">Concentração</th><th>Qtd(g)</th><th>Receita</th><th>St</th><th></th></tr></thead><tbody>';
   let vis=0;
   dadosRev.forEach((d,i)=>{
     if(fs&&d.substancia!==fs)return;
@@ -234,6 +235,7 @@ function renderRev(){
     h+='<td><input value="'+esc(d.prescritor)+'" data-i="'+i+'" data-f="prescritor" onchange="rEdPresc(this)"/></td>';
     h+='<td><input value="'+esc(d.crmvNr)+'" data-i="'+i+'" data-f="crmvNr" onchange="rEdCRMV(this)" style="width:60px"/></td>';
     h+='<td><input value="'+esc(d.crmvUf)+'" data-i="'+i+'" data-f="crmvUf" onchange="rEd(this)" style="width:35px" maxlength="2"/></td>';
+    h+='<td><input value="'+esc(d.cadMapa||'')+'" data-i="'+i+'" data-f="cadMapa" onchange="rEdCadMapa(this)" style="width:70px" placeholder="MAPA"/></td>';
     h+='<td><input value="'+esc(d.calculo)+'" data-i="'+i+'" data-f="calculo" onchange="rEd(this)"/></td>';
     h+='<td><input type="number" value="'+(d.qtdG||'')+'" data-i="'+i+'" data-f="qtdG" onchange="rEd(this)" step="0.0001" style="width:65px"/></td>';
     h+='<td><input value="'+esc(d.nrReceita)+'" data-i="'+i+'" data-f="nrReceita" onchange="rEd(this)" style="width:70px"/></td>';
@@ -249,7 +251,8 @@ function rEd(el){const i=+el.dataset.i,f=el.dataset.f;if(f==='qtdG')dadosRev[i][
 function rEdCPF(el){const i=+el.dataset.i,v=el.value;dadosRev[i].cpf=v;setC(dadosRev[i].clienteFull,v);const k=nn(dadosRev[i].clienteFull);dadosRev.forEach((d,j)=>{if(j!==i&&nn(d.clienteFull)===k)d.cpf=v;});renderRev();}
 function rEdEnd(el){const i=+el.dataset.i,v=up(el.value);dadosRev[i].endereco=v;setE(dadosRev[i].clienteFull,v);const k=nn(dadosRev[i].clienteFull);dadosRev.forEach((d,j)=>{if(j!==i&&nn(d.clienteFull)===k)d.endereco=v;});}
 function rEdPresc(el){const i=+el.dataset.i,v=up(el.value);dadosRev[i].prescritor=v;const c=getP(v);if(c.crmv){dadosRev[i].crmvNr=c.crmv;dadosRev[i].crmvUf=c.uf||'GO';renderRev();}}
-function rEdCRMV(el){const i=+el.dataset.i,v=el.value.trim();dadosRev[i].crmvNr=v;if(dadosRev[i].prescritor&&v)setP2(dadosRev[i].prescritor,v,dadosRev[i].crmvUf);}
+function rEdCRMV(el){const i=+el.dataset.i,v=el.value.trim();dadosRev[i].crmvNr=v;if(dadosRev[i].prescritor&&v)setP2(dadosRev[i].prescritor,v,dadosRev[i].crmvUf,dadosRev[i].cadMapa);}
+function rEdCadMapa(el){const i=+el.dataset.i,v=el.value.trim();dadosRev[i].cadMapa=v;if(dadosRev[i].prescritor)setP2(dadosRev[i].prescritor,dadosRev[i].crmvNr,dadosRev[i].crmvUf,v);}
 function tglSel(el){dadosRev[+el.dataset.i]._sel=el.checked;updSelCnt();}
 function selAll(c){dadosRev.forEach(d=>{d._sel=c;});document.querySelectorAll('#rev-tbl input[type="checkbox"]').forEach(cb=>{cb.checked=c;});updSelCnt();}
 function updSelCnt(){const n=dadosRev.filter(d=>d._sel).length;const el=document.getElementById('sel-cnt');if(el)el.textContent=n?n+' selecionado(s)':'';}
@@ -266,7 +269,7 @@ document.getElementById('btn-confirm').addEventListener('click',async()=>{
       if(d.status==='ATIVA'){
         if(d.cpf)setC(d.clienteFull,d.cpf);
         if(d.endereco)setE(d.clienteFull,d.endereco);
-        if(d.prescritor&&d.crmvNr)setP2(d.prescritor,d.crmvNr,d.crmvUf);
+        if(d.prescritor&&d.crmvNr)setP2(d.prescritor,d.crmvNr,d.crmvUf,d.cadMapa);
       }
     });
     // Inserir saídas nos movimentos (deduplicar por nrOm+substância)
@@ -278,7 +281,7 @@ document.getElementById('btn-confirm').addEventListener('click',async()=>{
       const ex=all[sn].lancamentos.find(l=>l.nrOm===d.nrOm&&l.tipo==='saida');
       const rec={
         tutor:d.clienteFull,cpf:d.cpf,endereco:d.endereco,
-        prescritor:d.prescritor,crmvNr:d.crmvNr,crmvUf:d.crmvUf,
+        prescritor:d.prescritor,crmvNr:d.crmvNr,crmvUf:d.crmvUf,cadMapa:d.cadMapa||'',
         calculo:d.calculo,doseMg:d.doseMg,nrReceita:d.nrReceita,
         substancia:d.substancia,lista:d.lista,
       };
@@ -324,13 +327,14 @@ function openModal(tipo){
     const entries=Object.entries(ldP()).sort((a,b)=>a[0].localeCompare(b[0]));
     const el=document.getElementById('presc-list');
     if(!entries.length){el.innerHTML='<p style="color:var(--mt);font-family:var(--mono);font-size:.72rem">Nenhum prescritor.</p>';}
-    else{let h='<table style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size:.7rem"><tr><th style="text-align:left;padding:4px;border-bottom:1px solid var(--bd);color:var(--ac);font-size:.6rem">PRESCRITOR</th><th style="padding:4px;border-bottom:1px solid var(--bd);color:var(--ac);font-size:.6rem">CRMV</th><th style="padding:4px;border-bottom:1px solid var(--bd);color:var(--ac);font-size:.6rem">UF</th><th></th></tr>';
-      entries.forEach(([n,v])=>{const sn=n.replace(/'/g,"\\'");h+='<tr><td style="padding:3px 5px;border-bottom:1px solid var(--bd)">'+esc(n)+'</td><td style="padding:3px 5px;border-bottom:1px solid var(--bd)"><input value="'+esc(v.crmv||'')+'" onchange="setP2(\''+sn+'\',this.value,this.parentElement.nextElementSibling.querySelector(\'input\').value)" style="background:var(--bg);border:1px solid var(--bd);border-radius:3px;color:var(--tx);font-family:var(--mono);font-size:.7rem;padding:2px 5px;width:80px"/></td><td style="padding:3px 5px;border-bottom:1px solid var(--bd)"><input value="'+esc(v.uf||'GO')+'" maxlength="2" onchange="setP2(\''+sn+'\',this.parentElement.previousElementSibling.querySelector(\'input\').value,this.value)" style="background:var(--bg);border:1px solid var(--bd);border-radius:3px;color:var(--tx);font-family:var(--mono);font-size:.7rem;padding:2px 5px;width:35px"/></td><td><button class="bd" style="font-size:.58rem;padding:2px 5px" onclick="const p=ldP();delete p[\''+sn+'\'];svP(p);this.closest(\'tr\').remove()">✕</button></td></tr>';});
+    else{let h='<table style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size:.7rem"><tr><th style="text-align:left;padding:4px;border-bottom:1px solid var(--bd);color:var(--ac);font-size:.6rem">PRESCRITOR</th><th style="padding:4px;border-bottom:1px solid var(--bd);color:var(--ac);font-size:.6rem">CRMV</th><th style="padding:4px;border-bottom:1px solid var(--bd);color:var(--ac);font-size:.6rem">UF</th><th style="padding:4px;border-bottom:1px solid var(--bd);color:var(--ac);font-size:.6rem">CAD.MAPA</th><th></th></tr>';
+      entries.forEach(([n,v])=>{const sn=n.replace(/'/g,"\\'");h+='<tr><td style="padding:3px 5px;border-bottom:1px solid var(--bd)">'+esc(n)+'</td><td style="padding:3px 5px;border-bottom:1px solid var(--bd)"><input value="'+esc(v.crmv||'')+'" onchange="updPresc(\''+sn+'\',this)" data-f="crmv" style="background:var(--bg);border:1px solid var(--bd);border-radius:3px;color:var(--tx);font-family:var(--mono);font-size:.7rem;padding:2px 5px;width:70px"/></td><td style="padding:3px 5px;border-bottom:1px solid var(--bd)"><input value="'+esc(v.uf||'GO')+'" maxlength="2" onchange="updPresc(\''+sn+'\',this)" data-f="uf" style="background:var(--bg);border:1px solid var(--bd);border-radius:3px;color:var(--tx);font-family:var(--mono);font-size:.7rem;padding:2px 5px;width:32px"/></td><td style="padding:3px 5px;border-bottom:1px solid var(--bd)"><input value="'+esc(v.cadMapa||'')+'" onchange="updPresc(\''+sn+'\',this)" data-f="cadMapa" style="background:var(--bg);border:1px solid var(--bd);border-radius:3px;color:var(--tx);font-family:var(--mono);font-size:.7rem;padding:2px 5px;width:70px"/></td><td><button class="bd" style="font-size:.58rem;padding:2px 5px" onclick="const p=ldP();delete p[\''+sn+'\'];svP(p);this.closest(\'tr\').remove()">✕</button></td></tr>';});
       h+='</table>';el.innerHTML=h;}
     document.getElementById('mo-presc').classList.add('a');
   }
 }
 function closeModal(t){document.getElementById('mo-'+(t==='cpf'?'cpf':'presc')).classList.remove('a');}
+function updPresc(nome,el){const p=ldP();const cur=p[nome]||{};cur[el.dataset.f]=el.value.trim();p[nome]=cur;svP(p);}
 function clearCad(t){if(!confirm('Limpar todos?'))return;if(t==='cpf'){svC({});openModal('cpf');}else{svP({});openModal('presc');}}
 document.getElementById('mo-cpf').addEventListener('click',function(e){if(e.target===this)closeModal('cpf');});
 document.getElementById('mo-presc').addEventListener('click',function(e){if(e.target===this)closeModal('presc');});
@@ -394,9 +398,9 @@ function addMov(){
   if(!qtd||qtd<=0){alert('Informe a quantidade.');return;}
   if(!data){alert('Informe a data.');return;}
   addLanc(nm,{id:uid(),tipo,data,qtd,descricao:up(desc),nrOm:null,nrDoc:null,origem:'manual',
-    nfNumero:nf,cnpjFornecedor:cnpj,fornecedor:up(desc)});
+    nfNumero:nf,cnpjFornecedor:cnpj,fornecedor:up(desc),nrPartida:document.getElementById('mv-partida').value.trim()});
   document.getElementById('mv-desc').value='';document.getElementById('mv-qtd').value='';
-  document.getElementById('mv-nf').value='';document.getElementById('mv-cnpj').value='';
+  document.getElementById('mv-nf').value='';document.getElementById('mv-cnpj').value='';document.getElementById('mv-partida').value='';
   renderMovList();
 }
 function rmMov(n,id){if(!confirm('Remover?'))return;rmLanc(n,id);delete mvSel[id];renderMovList();}
@@ -425,8 +429,8 @@ function printCorpo(){
   } else {thDate='<th style="width:18mm">DATA</th>';
     fnDate=(dt)=>'<td class="cd">'+(dt?fmtD(dt):'')+'</td>';}
 
-  let html='<div class="pr-corpo"><h2>LIVRO DE REGISTRO DE ESTOQUE DE SUBSTÂNCIAS SUJEITAS A CONTROLE ESPECIAL DE USO VETERINÁRIO</h2>'+
-    '<h3>SUBSTÂNCIA (DCB): '+s.n+' ('+s.d+') | Lista: '+s.l+' | '+estab+'<br>Período: '+per+'</h3>'+
+  let html='<div class="pr-corpo"><h2>LIVRO DE REGISTRO DE ESTOQUE DE SUBSTÂNCIAS SUJEITAS AO CONTROLE ESPECIAL E PRODUTOS DE USO VETERINÁRIO QUE AS CONTENHAM</h2>'+
+    '<h3>Substância (DCB): '+s.n+' ('+s.d+') | Lista: '+s.l+'<br>Nome do produto: Manipulado | Concentração: conforme prescrição<br>'+estab+' · Período: '+per+'<br><small>Portaria MAPA nº 837/2025</small></h3>'+
     '<table><tr>'+thDate+'<th>EST.INICIAL(g)</th><th>ENTRADA(g)</th><th>SAÍDA(g)</th><th>PERDAS(g)</th><th>EST.FINAL(g)</th><th style="width:18mm">REG/DOC</th><th class="ci">OUTRAS INFORMAÇÕES</th><th class="crt">ASSINATURA RT</th></tr>';
 
   // Estoque inicial row
@@ -456,9 +460,9 @@ function printCorpo(){
     // Outras informações conforme Art 11 §4
     let info='';
     if(l.tipo==='saida'){
-      info=[l.tutor,l.cpf?'CPF: '+l.cpf:'',l.nrReceita?'Rec: '+l.nrReceita:'',l.prescritor?'CRMV-'+(l.crmvUf||'GO')+' '+l.crmvNr:''].filter(Boolean).join(' | ');
+      info=[l.tutor,l.cpf?'CPF:'+l.cpf:'',l.nrReceita?'Rec:'+l.nrReceita:'',l.prescritor?'CRMV-'+(l.crmvUf||'GO')+' '+l.crmvNr:'',l.cadMapa?'MAPA:'+l.cadMapa:''].filter(Boolean).join(' | ');
     } else if(l.tipo==='entrada'){
-      info=['ENTRADA',l.nfNumero?'NF: '+l.nfNumero:'',l.cnpjFornecedor?'CNPJ: '+l.cnpjFornecedor:'',l.fornecedor||l.descricao].filter(Boolean).join(' | ');
+      info=['ENTRADA',l.nrPartida?'Partida:'+l.nrPartida:'',l.nfNumero?'NF:'+l.nfNumero:'',l.cnpjFornecedor?'CNPJ:'+l.cnpjFornecedor:'',l.fornecedor||l.descricao].filter(Boolean).join(' | ');
     } else {
       info='PERDA: '+(l.descricao||'');
     }
@@ -514,7 +518,46 @@ function printEtq(modo){
   window.print();
 }
 
-// ═══ IMPRESSÃO — ANEXO VII (ESTOQUE SUBSTÂNCIAS) ═══
+// ═══ IMPRESSÃO — ANEXO IX (MANIPULADORES — PORTARIA 837/2025 Art.15) ═══
+function printAnexoIX(){
+  const estab=up(document.getElementById('inp-estab').value)||'R S O MANIPULAÇÃO ANIMAL';
+  const per=document.getElementById('inp-per').value.trim()||'';
+  let html='<div class="pr-anx"><h2>ANEXO IX — RELATÓRIO DE MOVIMENTAÇÃO DE ESTOQUE DE SUBSTÂNCIAS SUJEITAS AO CONTROLE ESPECIAL PARA ESTABELECIMENTOS MANIPULADORES</h2>'+
+    '<h3>'+estab+' · CNPJ: _____________ · Nº de Licença no MAPA: _____________<br>Ano de referência: '+new Date().getFullYear()+' · Período: '+per+'<br><small>Portaria MAPA nº 837/2025</small></h3>'+
+    '<h4>RELATÓRIO COMPLETO:</h4>'+
+    '<table><tr><th>Substância (DCB)</th><th>Lista</th><th>Estoque inicial (g)</th><th>Importação (g)</th><th>Aquisição (g)</th><th>Perdas (g)</th><th>Manipulação de produtos (g)</th><th>Estoque final</th></tr>';
+  for(const s of SUB){
+    const sm=getSM(s.n);
+    const te=ar(sm.lancamentos.filter(l=>l.tipo==='entrada').reduce((a,l)=>a+l.qtd,0));
+    const ts=ar(sm.lancamentos.filter(l=>l.tipo==='saida').reduce((a,l)=>a+l.qtd,0));
+    const tp=ar(sm.lancamentos.filter(l=>l.tipo==='perda').reduce((a,l)=>a+l.qtd,0));
+    html+='<tr><td>'+s.n+' ('+s.d+')</td><td style="text-align:center">'+s.l+'</td><td style="text-align:right">'+ar(sm.estoqueInicial).toFixed(4)+'</td><td></td><td style="text-align:right">'+(te?te.toFixed(4):'—')+'</td><td style="text-align:right">'+(tp?tp.toFixed(4):'—')+'</td><td style="text-align:right">'+(ts?ts.toFixed(4):'—')+'</td><td style="text-align:right">'+ar(saldoFinal(s.n)).toFixed(4)+'</td></tr>';
+  }
+  html+='</table>';
+  // Aquisições
+  html+='<h4>RELATÓRIO DE AQUISIÇÕES DE SUBSTÂNCIAS SUJEITAS AO CONTROLE ESPECIAL:</h4><table><tr><th>Substância (DCB)</th><th>Lista</th><th>Quantidade</th><th>CNPJ do estabelecimento fornecedor</th><th>Razão social do estabelecimento fornecedor</th><th>Nº da nota fiscal</th><th>Data da nota fiscal</th></tr>';
+  for(const s of SUB){
+    const sm=getSM(s.n);
+    sm.lancamentos.filter(l=>l.tipo==='entrada').forEach(l=>{
+      html+='<tr><td>'+s.n+'</td><td>'+s.l+'</td><td>'+l.qtd.toFixed(4)+'</td><td>'+(l.cnpjFornecedor||'')+'</td><td>'+(l.fornecedor||l.descricao||'')+'</td><td>'+(l.nfNumero||'')+'</td><td>'+(l.data||'')+'</td></tr>';
+    });
+  }
+  html+='</table>';
+  // Vendas (dispensações)
+  html+='<h4>RELATÓRIO DE VENDAS DE PRODUTOS VETERINÁRIOS QUE CONTENHAM SUBSTÂNCIAS SUJEITAS AO CONTROLE ESPECIAL:</h4><table><tr><th>Substância (DCB)</th><th>Lista</th><th>Quantidade (g)</th><th>CPF do adquirente</th><th>Nome do adquirente</th><th>Prescritor</th><th>Cadastro do prescritor no MAPA</th><th>Nº da ordem de manipulação</th><th>Nº da nota fiscal</th><th>Data da nota fiscal</th></tr>';
+  for(const s of SUB){
+    const sm=getSM(s.n);
+    sm.lancamentos.filter(l=>l.tipo==='saida').forEach(l=>{
+      html+='<tr><td>'+s.n+'</td><td>'+s.l+'</td><td>'+l.qtd.toFixed(4)+'</td><td>'+(l.cpf||'')+'</td><td>'+(l.tutor||'')+'</td><td>'+(l.prescritor||'')+'</td><td>'+(l.cadMapa||'')+'</td><td>'+(l.nrOm||'')+'</td><td>'+(l.nrDoc||'')+'</td><td>'+(l.data||'')+'</td></tr>';
+    });
+  }
+  html+='</table>';
+  html+='<div class="sig"><hr><strong>Paulo Edson Fernandes</strong><br>Farmacêutico RT — CRF-GO 9303<br>Portaria MAPA nº 837/2025 · Art. 15</div></div>';
+  document.getElementById('print-area').innerHTML=html;
+  window.print();
+}
+
+// ═══ IMPRESSÃO — ANEXO VII (FORMATO ANTIGO — mantido para compatibilidade) ═══
 function printAnexoVII(){
   const estab=up(document.getElementById('inp-estab').value)||'R S O MANIPULAÇÃO ANIMAL';
   const per=document.getElementById('inp-per').value.trim()||'';
@@ -560,11 +603,11 @@ function printAnexoVIII(){
   }
   html+='</table>';
   // Vendas detail
-  html+='<h4>RELATÓRIO DE VENDAS DE PRODUTOS QUE CONTENHAM SUBSTÂNCIAS SUJEITAS A CONTROLE ESPECIAL</h4><table><tr><th>SUBSTÂNCIA</th><th>LISTA</th><th>QUANTIDADE(g)</th><th>CPF/CNPJ ADQUIRENTE</th><th>NOME ADQUIRENTE</th><th>Nº CADASTRO MED VET</th><th>Nº RECEITA</th><th>DATA</th></tr>';
+  html+='<h4>RELATÓRIO DE VENDAS DE PRODUTOS QUE CONTENHAM SUBSTÂNCIAS SUJEITAS A CONTROLE ESPECIAL</h4><table><tr><th>SUBSTÂNCIA</th><th>LISTA</th><th>QUANTIDADE(g)</th><th>CPF/CNPJ ADQUIRENTE</th><th>NOME ADQUIRENTE</th><th>Nº CADASTRO MED VET MAPA</th><th>CRMV</th><th>Nº RECEITA</th><th>Nº OM</th><th>DATA</th></tr>';
   for(const s of SUB){
     const sm=getSM(s.n);
     sm.lancamentos.filter(l=>l.tipo==='saida').forEach(l=>{
-      html+='<tr><td>'+s.n+'</td><td>'+s.l+'</td><td>'+l.qtd.toFixed(4)+'</td><td>'+(l.cpf||'')+'</td><td>'+(l.tutor||'')+'</td><td>'+(l.crmvNr?'CRMV-'+(l.crmvUf||'GO')+' '+l.crmvNr:'')+'</td><td>'+(l.nrReceita||'')+'</td><td>'+(l.data||'')+'</td></tr>';
+      html+='<tr><td>'+s.n+'</td><td>'+s.l+'</td><td>'+l.qtd.toFixed(4)+'</td><td>'+(l.cpf||'')+'</td><td>'+(l.tutor||'')+'</td><td>'+(l.cadMapa||'')+'</td><td>'+(l.crmvNr?'CRMV-'+(l.crmvUf||'GO')+' '+l.crmvNr:'')+'</td><td>'+(l.nrReceita||'')+'</td><td>'+(l.nrOm||'')+'</td><td>'+(l.data||'')+'</td></tr>';
     });
   }
   html+='</table>';
