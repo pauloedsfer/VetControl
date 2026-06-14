@@ -165,7 +165,7 @@ footer{margin-top:40px;text-align:center;font-family:var(--mono);font-size:.68re
 <header>
 <div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg></div>
 <div class="hdr"><h1>Controlados</h1><p>R S O MANIPULAÇÃO ANIMAL · GO 0198-8</p></div>
-<span class="vtag">v4.0</span>
+<span class="vtag">v4.1</span>
 </header>
 <div class="tabs">
 <button class="tab a" onclick="swTab('imp',this)">Importar</button>
@@ -233,6 +233,7 @@ footer{margin-top:40px;text-align:center;font-family:var(--mono);font-size:.68re
 <button class="bs bsm" onclick="printCorpo()">🖨 Corpo (Livro)</button>
 <button class="bs bsm" onclick="printEtq('grade')">🏷 Etq 3×5</button>
 <button class="bs bsm" onclick="printEtq('linear')">🏷 Etq Livro</button>
+<button class="bs bsm" onclick="printAnexoIX()">📋 Anexo IX (Manip.)</button>
 <button class="bs bsm" onclick="printAnexoVII()">📋 Anexo VII</button>
 <button class="bs bsm" onclick="printAnexoVIII()">📋 Anexo VIII</button>
 </div>
@@ -245,6 +246,7 @@ footer{margin-top:40px;text-align:center;font-family:var(--mono);font-size:.68re
 <div><label>Data</label><input type="date" id="mv-data"/></div>
 <div><label>Nº NF</label><input id="mv-nf" placeholder="12345"/></div>
 <div><label>CNPJ Forn.</label><input id="mv-cnpj" placeholder="00.000.000/0001-00"/></div>
+<div><label>Nº Partida</label><input id="mv-partida" placeholder="Lote"/></div>
 <button class="bs bsm" onclick="addMov()" style="height:32px;align-self:end">+ Adicionar</button>
 </div>
 </div>
@@ -265,9 +267,9 @@ footer{margin-top:40px;text-align:center;font-family:var(--mono);font-size:.68re
 <div class="sl">Passo a passo — v4.0</div>
 <div class="cd" style="line-height:1.7;font-size:.82rem;color:var(--mt)">
 <p><strong style="color:var(--tx)">1. Importar:</strong> Faça upload dos XLS do Farma Fácil, revise e confirme. Os dados vão direto para os Movimentos.</p>
-<p style="margin-top:8px"><strong style="color:var(--tx)">2. Movimentos (hub central):</strong> Visualize por substância, selecione registros, imprima Corpo, Etiquetas, Anexos VII e VIII. Adicione entradas (NF com CNPJ do fornecedor) e perdas.</p>
-<p style="margin-top:8px"><strong style="color:var(--tx)">3. Impressão:</strong> O Corpo inclui coluna ASSINATURA DO RT. "Outras informações" contém CPF do tutor (saídas) e dados do fornecedor (entradas), conforme Art. 11 §4 da IN 35/2017. Formato de data configurável.</p>
-<p style="margin-top:8px"><strong style="color:var(--tx)">4. CRMV com UF:</strong> Cadastro de prescritores salva CRMV + UF (ex: GO, SP). Formato impresso: "CRMV-GO 1234".</p>
+<p style="margin-top:8px"><strong style="color:var(--tx)">2. Movimentos (hub central):</strong> Visualize por substância, selecione registros, imprima Corpo, Etiquetas, Anexo IX (manipuladores), VII e VIII. Adicione entradas (NF, CNPJ, Nº Partida) e perdas.</p>
+<p style="margin-top:8px"><strong style="color:var(--tx)">3. Impressão:</strong> O Corpo inclui coluna ASSINATURA DO RT. "Outras informações" inclui CPF, Nº Partida, CNPJ fornecedor, Cadastro MAPA do prescritor — conforme Art. 11 §4 da Portaria MAPA nº 837/2025.</p>
+<p style="margin-top:8px"><strong style="color:var(--tx)">4. Prescritores:</strong> Cadastro salva CRMV + UF + Cadastro MAPA (SIPEAGRO). Formato: "CRMV-GO 1234".</p>
 <p style="margin-top:8px"><strong style="color:var(--tx)">5. Estoque:</strong> O estoque inicial é automaticamente o saldo final dos movimentos. Edite apenas na abertura do semestre.</p>
 <p style="margin-top:8px"><strong style="color:var(--tx)">6. Backup:</strong> Exporte regularmente. O sistema avisa após 7 dias sem backup.</p>
 </div>
@@ -278,11 +280,11 @@ footer{margin-top:40px;text-align:center;font-family:var(--mono);font-size:.68re
 
 <!-- ═══ MODAIS ═══ -->
 <div class="mo" id="mo-cpf"><div class="ml"><button class="mc" onclick="closeModal('cpf')">✕</button><h3>Cadastro de CPFs</h3><div id="cpf-list" style="max-height:50vh;overflow-y:auto"></div><div class="brow" style="margin-top:14px"><button class="bs bsm" onclick="closeModal('cpf')">Fechar</button><button class="bd" onclick="clearCad('cpf')" style="margin-left:auto">Limpar todos</button></div></div></div>
-<div class="mo" id="mo-presc"><div class="ml"><button class="mc" onclick="closeModal('presc')">✕</button><h3>Cadastro de Prescritores (CRMV + UF)</h3><div id="presc-list" style="max-height:50vh;overflow-y:auto"></div><div class="brow" style="margin-top:14px"><button class="bs bsm" onclick="closeModal('presc')">Fechar</button><button class="bd" onclick="clearCad('presc')" style="margin-left:auto">Limpar todos</button></div></div></div>
+<div class="mo" id="mo-presc"><div class="ml"><button class="mc" onclick="closeModal('presc')">✕</button><h3>Cadastro de Prescritores (CRMV + UF + Cad.MAPA)</h3><div id="presc-list" style="max-height:50vh;overflow-y:auto"></div><div class="brow" style="margin-top:14px"><button class="bs bsm" onclick="closeModal('presc')">Fechar</button><button class="bd" onclick="clearCad('presc')" style="margin-left:auto">Limpar todos</button></div></div></div>
 
 <footer>
 <p>R S O Manipulação Animal · Paulo Edson Fernandes — CRF-GO 9303 · GO 0198-8</p>
-<p style="margin-top:3px">Processamento 100% local — nenhum dado enviado a servidores · IN 35/2017 MAPA</p>
+<p style="margin-top:3px">Processamento 100% local — nenhum dado enviado a servidores · Portaria MAPA nº 837/2025</p>
 </footer>
 </div>
 <div id="print-area"></div>
