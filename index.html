@@ -168,7 +168,7 @@ footer{margin-top:40px;text-align:center;font-family:var(--mono);font-size:.68re
 <header>
 <div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg></div>
 <div class="hdr"><h1>Controlados</h1><p>R S O MANIPULAÇÃO ANIMAL · GO 0198-8</p></div>
-<span class="vtag">v4.1</span>
+<span class="vtag">v4.2</span>
 </header>
 <div class="tabs">
 <button class="tab a" onclick="swTab('imp',this)">Importar</button>
@@ -178,7 +178,7 @@ footer{margin-top:40px;text-align:center;font-family:var(--mono);font-size:.68re
 </div>
 
 <!-- ═══ TAB IMPORTAR ═══ -->
-<div class="tp a" id="tp-imp">
+<div class="tp" id="tp-imp">
 <div class="sl">01 · Upload dos relatórios Farma Fácil</div>
 <div class="cd">
 <div class="ugrid">
@@ -215,12 +215,14 @@ footer{margin-top:40px;text-align:center;font-family:var(--mono);font-size:.68re
 </div>
 
 <!-- ═══ TAB MOVIMENTOS ═══ -->
-<div class="tp" id="tp-mov">
+<div class="tp a" id="tp-mov">
 <div class="sl">Movimentos por substância</div>
 <div class="cd">
 <div class="mv-tb">
 <div class="fd" style="margin-bottom:0;min-width:180px"><label>Substância</label><select id="mv-sub"></select></div>
-<div class="fd" style="margin-bottom:0"><label>Formato data impressão</label><select id="mv-dtfmt"><option value="unica">dd/mm/aaaa</option><option value="sep">DIA | MÊS | ANO</option></select></div>
+<div class="fd" style="margin-bottom:0"><label>Ano</label><select id="mv-ano"></select></div>
+<div class="fd" style="margin-bottom:0"><label>Semestre</label><select id="mv-sem"><option value="1">1o Sem</option><option value="2">2o Sem</option></select></div>
+<div class="fd" style="margin-bottom:0"><label>Fmt Data impressão</label><select id="mv-dtfmt"><option value="unica">dd/mm/aaaa</option><option value="sep">DIA | MÊS | ANO</option></select></div>
 <button class="bs bsm" onclick="openModal('presc')" style="align-self:end">Prescritores</button>
 <button class="bs bsm" onclick="openModal('cpf')" style="align-self:end">CPFs</button>
 </div>
@@ -287,6 +289,14 @@ footer{margin-top:40px;text-align:center;font-family:var(--mono);font-size:.68re
 <div class="mo" id="mo-cpf"><div class="ml"><button class="mc" onclick="closeModal('cpf')">✕</button><h3>Cadastro de CPFs</h3><div id="cpf-list" style="max-height:50vh;overflow-y:auto"></div><div class="brow" style="margin-top:14px"><button class="bs bsm" onclick="closeModal('cpf')">Fechar</button><button class="bd" onclick="clearCad('cpf')" style="margin-left:auto">Limpar todos</button></div></div></div>
 <div class="mo" id="mo-presc"><div class="ml"><button class="mc" onclick="closeModal('presc')">✕</button><h3>Cadastro de Prescritores (CRMV + UF + Cad.MAPA)</h3><div id="presc-list" style="max-height:40vh;overflow-y:auto"></div><div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--bd)"><div style="font-family:var(--mono);font-size:.65rem;color:var(--mt);margin-bottom:6px">ADICIONAR PRESCRITOR:</div><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:end"><input id="add-p-nome" placeholder="Nome" style="flex:2;min-width:120px;background:var(--sf2);border:1px solid var(--bd);border-radius:5px;padding:5px 7px;font-family:var(--sans);font-size:.75rem;color:var(--tx)"/><input id="add-p-crmv" placeholder="CRMV" style="width:70px;background:var(--sf2);border:1px solid var(--bd);border-radius:5px;padding:5px 7px;font-family:var(--sans);font-size:.75rem;color:var(--tx)"/><input id="add-p-uf" placeholder="UF" value="GO" maxlength="2" style="width:35px;background:var(--sf2);border:1px solid var(--bd);border-radius:5px;padding:5px 7px;font-family:var(--sans);font-size:.75rem;color:var(--tx)"/><input id="add-p-mapa" placeholder="Cad.MAPA" style="width:70px;background:var(--sf2);border:1px solid var(--bd);border-radius:5px;padding:5px 7px;font-family:var(--sans);font-size:.75rem;color:var(--tx)"/><button class="bs bsm" onclick="addPrescManual()">+ Adicionar</button></div></div><div class="brow" style="margin-top:14px"><button class="bs bsm" onclick="closeModal('presc')">Fechar</button><button class="bd" onclick="clearCad('presc')" style="margin-left:auto">Limpar todos</button></div></div></div>
 
+<div class="mo" id="mo-config"><div class="ml"><button class="mc" onclick="closeModal('config')">x</button><h3>Configuracoes do Estabelecimento</h3>
+<div style="display:grid;gap:10px">
+<div class="fd"><label>Nome Fantasia</label><input id="cfg-fantasia"/></div>
+<div class="fd"><label>Razao Social</label><input id="cfg-razao"/></div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div class="fd"><label>CNPJ</label><input id="cfg-cnpj"/></div><div class="fd"><label>Licenca MAPA</label><input id="cfg-mapa"/></div></div>
+<div class="fd"><label>Endereco</label><input id="cfg-endereco"/></div>
+<div style="display:grid;grid-template-columns:2fr 1fr;gap:10px"><div class="fd"><label>Farmaceutico RT</label><input id="cfg-rt-nome"/></div><div class="fd"><label>CRF</label><input id="cfg-rt-crf"/></div></div>
+</div><div class="brow" style="margin-top:16px"><button class="bg" style="padding:10px 20px;width:auto" onclick="saveConfig()">Salvar</button></div></div></div>
 <footer>
 <p>R S O Manipulação Animal · Paulo Edson Fernandes — CRF-GO 9303 · GO 0198-8</p>
 <p style="margin-top:3px">Processamento 100% local — nenhum dado enviado a servidores · Portaria MAPA nº 837/2025</p>
