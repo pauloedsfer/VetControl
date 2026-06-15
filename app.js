@@ -335,6 +335,18 @@ function openModal(tipo){
 }
 function closeModal(t){document.getElementById('mo-'+(t==='cpf'?'cpf':'presc')).classList.remove('a');}
 function updPresc(nome,el){const p=ldP();const cur=p[nome]||{};cur[el.dataset.f]=el.value.trim();p[nome]=cur;svP(p);}
+function addPrescManual(){
+  const nome=up(document.getElementById('add-p-nome').value);
+  const crmv=document.getElementById('add-p-crmv').value.trim();
+  const uf=up(document.getElementById('add-p-uf').value)||'GO';
+  const mapa=document.getElementById('add-p-mapa').value.trim();
+  if(!nome){alert('Informe o nome do prescritor.');return;}
+  setP2(nome,crmv,uf,mapa);
+  document.getElementById('add-p-nome').value='';
+  document.getElementById('add-p-crmv').value='';
+  document.getElementById('add-p-mapa').value='';
+  openModal('presc');
+}
 function clearCad(t){if(!confirm('Limpar todos?'))return;if(t==='cpf'){svC({});openModal('cpf');}else{svP({});openModal('presc');}}
 document.getElementById('mo-cpf').addEventListener('click',function(e){if(e.target===this)closeModal('cpf');});
 document.getElementById('mo-presc').addEventListener('click',function(e){if(e.target===this)closeModal('presc');});
@@ -734,11 +746,26 @@ document.getElementById('mv-sub').innerHTML=SUB.map(s=>'<option value="'+s.n+'">
 chkBkp();
 // Auto-migrar dados v3 se necessário
 (function(){
-  const movs=ldM();let need=false;
+  const movs=ldM();let needMigrate=false;
   for(const sn of Object.keys(movs)){
     const s=movs[sn];if(!s||!s.lancamentos)continue;
-    for(const l of s.lancamentos){if(l.tipo==='saida'&&l.nrOm&&(!l.tutor||l.tutor.length<2)){need=true;break;}}
-    if(need)break;
+    for(const l of s.lancamentos){if(l.tipo==='saida'&&l.nrOm&&(!l.tutor||l.tutor.length<2)){needMigrate=true;break;}}
+    if(needMigrate)break;
   }
-  if(need){console.log('Detectados movimentos v3 sem dados de tutor. Executando migração...');migrateV3toV4(ldH(),ldC(),ldE(),ldP());}
+  if(needMigrate){console.log('Detectados movimentos v3 sem dados de tutor. Executando migração...');migrateV3toV4(ldH(),ldC(),ldE(),ldP());}
+  // Extrair prescritores de movimentos existentes para o cadastro
+  const prescs=ldP();let added=0;
+  for(const sn of Object.keys(movs)){
+    const s=movs[sn];if(!s||!s.lancamentos)continue;
+    for(const l of s.lancamentos){
+      if(l.tipo==='saida'&&l.prescritor&&l.prescritor.length>2&&l.crmvNr){
+        const k=nn(l.prescritor);
+        if(!prescs[k]||!prescs[k].crmv){
+          prescs[k]={crmv:l.crmvNr,uf:l.crmvUf||'GO',cadMapa:l.cadMapa||''};
+          added++;
+        }
+      }
+    }
+  }
+  if(added>0){svP(prescs);console.log('Extraídos '+added+' prescritores dos movimentos existentes.');}
 })();
