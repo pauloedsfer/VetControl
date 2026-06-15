@@ -13,7 +13,7 @@ const SUB=[
 ];
 const MES=['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
 const K={h:'controlados_fa_v2',c:'controlados_cpfs',e:'controlados_enderecos',
-  p:'controlados_prescritores',m:'controlados_movimentos',b:'controlados_ultimo_backup'};
+  p:'controlados_prescritores',m:'controlados_movimentos',b:'controlados_ultimo_backup',cfg:'controlados_config'};
 
 // ═══ ESTADO TRANSITÓRIO (só durante importação) ═══
 let rawMov=null,rawCE=null,dadosRev=[];
@@ -63,6 +63,14 @@ function saldoFinal(n){const s=getSM(n);if(!s.lancamentos.length)return s.estoqu
 // Backup
 function markBkp(){localStorage.setItem(K.b,new Date().toISOString());}
 function chkBkp(){const l=localStorage.getItem(K.b);if(!l||Date.now()-new Date(l).getTime()>7*864e5)document.getElementById('bkp-rem').classList.add('v');}
+const defCfg={fantasia:'R S O MANIPULACAO ANIMAL',razao:'',cnpj:'',mapa:'GO 0198-8',endereco:'',rtNome:'Paulo Edson Fernandes',rtCrf:'CRF-GO 9303'};
+function ldCfg(){return{...defCfg,...ls(K.cfg,{})};}function svCfg(c){sv(K.cfg,c);}
+function cfgHeader(){const c=ldCfg();return(c.razao||c.fantasia)+' CNPJ: '+(c.cnpj||'_____')+' Licenca MAPA: '+(c.mapa||'_____')+(c.endereco?'<br>'+c.endereco:'');}
+function cfgSig(){const c=ldCfg();return'<strong>'+(c.rtNome||'RT')+'</strong><br>Farmaceutico RT - '+(c.rtCrf||'CRF');}
+function getSemDates(){const a=parseInt(document.getElementById('mv-ano').value)||new Date().getFullYear();const s=document.getElementById('mv-sem').value;if(s==='1')return{ini:a+'-01-01',fim:a+'-06-30',label:'1o Semestre '+a+' (01/01-30/06)',ano:a};return{ini:a+'-07-01',fim:a+'-12-31',label:'2o Semestre '+a+' (01/07-31/12)',ano:a};}
+function filterBySem(lancs){const{ini,fim}=getSemDates();return lancs.filter(l=>l.data&&l.data>=ini&&l.data<=fim);}
+function openConfigModal(){var c=ldCfg();document.getElementById('cfg-fantasia').value=c.fantasia||'';document.getElementById('cfg-razao').value=c.razao||'';document.getElementById('cfg-cnpj').value=c.cnpj||'';document.getElementById('cfg-mapa').value=c.mapa||'';document.getElementById('cfg-endereco').value=c.endereco||'';document.getElementById('cfg-rt-nome').value=c.rtNome||'';document.getElementById('cfg-rt-crf').value=c.rtCrf||'';document.getElementById('mo-config').classList.add('a');}
+function saveConfig(){svCfg({fantasia:document.getElementById('cfg-fantasia').value.trim(),razao:document.getElementById('cfg-razao').value.trim(),cnpj:document.getElementById('cfg-cnpj').value.trim(),mapa:document.getElementById('cfg-mapa').value.trim(),endereco:document.getElementById('cfg-endereco').value.trim(),rtNome:document.getElementById('cfg-rt-nome').value.trim(),rtCrf:document.getElementById('cfg-rt-crf').value.trim()});closeModal('config');document.getElementById('inp-estab').value=ldCfg().fantasia||'';}
 
 // ═══ TABS ═══
 function swTab(id,btn){
@@ -315,6 +323,7 @@ document.getElementById('btn-confirm').addEventListener('click',async()=>{
 
 // ═══ MODAIS CPF / PRESCRITOR ═══
 function openModal(tipo){
+  if(tipo==="config"){openConfigModal();return;}
   if(tipo==='cpf'){
     const entries=Object.entries(ldC()).sort((a,b)=>a[0].localeCompare(b[0]));
     const el=document.getElementById('cpf-list');
@@ -333,7 +342,7 @@ function openModal(tipo){
     document.getElementById('mo-presc').classList.add('a');
   }
 }
-function closeModal(t){document.getElementById('mo-'+(t==='cpf'?'cpf':'presc')).classList.remove('a');}
+function closeModal(t){var id=t==='cpf'?'mo-cpf':t==='presc'?'mo-presc':'mo-config';document.getElementById(id).classList.remove('a');}
 function updPresc(nome,el){const p=ldP();const cur=p[nome]||{};cur[el.dataset.f]=el.value.trim();p[nome]=cur;svP(p);}
 function addPrescManual(){
   const nome=up(document.getElementById('add-p-nome').value);
@@ -350,6 +359,7 @@ function addPrescManual(){
 function clearCad(t){if(!confirm('Limpar todos?'))return;if(t==='cpf'){svC({});openModal('cpf');}else{svP({});openModal('presc');}}
 document.getElementById('mo-cpf').addEventListener('click',function(e){if(e.target===this)closeModal('cpf');});
 document.getElementById('mo-presc').addEventListener('click',function(e){if(e.target===this)closeModal('presc');});
+document.getElementById('mo-config').addEventListener('click',function(e){if(e.target===this)closeModal('config');});
 
 // ═══ ABA MOVIMENTOS ═══
 let mvSel={};// {lancId:true}
@@ -743,7 +753,10 @@ function migrateV3toV4(hist, cpfs, enderecos, prescritores){
 setupDZ('z-m','f-m','fn-m','m');
 setupDZ('z-c','f-c','fn-c','c');
 document.getElementById('mv-sub').innerHTML=SUB.map(s=>'<option value="'+s.n+'">'+s.n+' ('+s.l+')</option>').join('');
-chkBkp();
+var ySel=document.getElementById('mv-ano');var cY=new Date().getFullYear();for(var y=cY-2;y<=cY+1;y++){var o=document.createElement('option');o.value=y;o.textContent=y;if(y===cY)o.selected=true;ySel.appendChild(o);}
+document.getElementById('mv-sem').value=new Date().getMonth()<6?'1':'2';
+document.getElementById('inp-estab').value=ldCfg().fantasia||'R S O MANIPULACAO ANIMAL';
+chkBkp();setTimeout(function(){renderMov();},100);
 // Auto-migrar dados v3 se necessário
 (function(){
   const movs=ldM();let needMigrate=false;
