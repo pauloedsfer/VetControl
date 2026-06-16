@@ -435,8 +435,7 @@ function printCorpo(){
   const sm=getSM(nm);
   const lancs=getSelLancs(nm);
   if(!lancs.length){alert('Nenhum lançamento para imprimir.');return;}
-  const estab=up(document.getElementById('inp-estab').value)||'R S O MANIPULAÇÃO ANIMAL';
-  const per=document.getElementById('inp-per').value.trim()||'';
+  const _cfg=ldCfg();const _sem=getSemDates();
   const dtFmt=document.getElementById('mv-dtfmt').value;
   const ei=sm.estoqueInicial;
   // Recalculate saldo for selected range
@@ -453,12 +452,12 @@ function printCorpo(){
     fnDate=(dt)=>'<td class="cd">'+(dt?fmtD(dt):'')+'</td>';}
 
   let html='<div class="pr-corpo"><h2>LIVRO DE REGISTRO DE ESTOQUE DE SUBSTÂNCIAS SUJEITAS AO CONTROLE ESPECIAL E PRODUTOS DE USO VETERINÁRIO QUE AS CONTENHAM</h2>'+
-    '<h3>Substância (DCB): '+s.n+' ('+s.d+') | Lista: '+s.l+'<br>Nome do produto: Manipulado | Concentração: conforme prescrição<br>'+estab+' · Período: '+per+'<br><small>Portaria MAPA nº 837/2025</small></h3>'+
+    '<h3>Substância (DCB): '+s.n+' ('+s.d+') | Lista: '+s.l+'<br>Nome do produto: Manipulado | Concentração: conforme prescrição<br>'+(_cfg.razao||_cfg.fantasia)+' · CNPJ: '+(_cfg.cnpj||'')+' · MAPA: '+(_cfg.mapa||'')+'<br>Período: '+_sem.label+'<br><small>Portaria MAPA nº 837/2025</small></h3>'+
     '<table><tr>'+thDate+'<th>EST.INICIAL(g)</th><th>ENTRADA(g)</th><th>SAÍDA(g)</th><th>PERDAS(g)</th><th>EST.FINAL(g)</th><th style="width:18mm">REG/DOC</th><th class="ci">OUTRAS INFORMAÇÕES</th><th class="crt">ASSINATURA RT</th></tr>';
 
   // Estoque inicial row
   const eiCols=dtFmt==='sep'?'<td></td><td></td><td>EST.INI</td>':'<td>EST.INICIAL</td>';
-  html+='<tr class="re">'+eiCols+'<td>'+ei.toFixed(4)+'</td><td></td><td></td><td></td><td>'+ei.toFixed(4)+'</td><td></td><td class="ci">Estoque inicial — '+per+'</td><td></td></tr>';
+  html+='<tr class="re">'+eiCols+'<td>'+ei.toFixed(4)+'</td><td></td><td></td><td></td><td>'+ei.toFixed(4)+'</td><td></td><td class="ci">Estoque inicial — '+_sem.label+'</td><td></td></tr>';
 
   saldo=ei;
   const rows=useAll?allLancs:lancs;
@@ -543,10 +542,9 @@ function printEtq(modo){
 
 // ═══ IMPRESSÃO — ANEXO IX (MANIPULADORES — PORTARIA 837/2025 Art.15) ═══
 function printAnexoIX(){
-  const estab=up(document.getElementById('inp-estab').value)||'R S O MANIPULAÇÃO ANIMAL';
-  const per=document.getElementById('inp-per').value.trim()||'';
+  const _cfg=ldCfg();const _sem=getSemDates();
   let html='<div class="pr-anx"><h2>ANEXO IX — RELATÓRIO DE MOVIMENTAÇÃO DE ESTOQUE DE SUBSTÂNCIAS SUJEITAS AO CONTROLE ESPECIAL PARA ESTABELECIMENTOS MANIPULADORES</h2>'+
-    '<h3>'+estab+' · CNPJ: _____________ · Nº de Licença no MAPA: _____________<br>Ano de referência: '+new Date().getFullYear()+' · Período: '+per+'<br><small>Portaria MAPA nº 837/2025</small></h3>'+
+    '<h3>'+(_cfg.razao||_cfg.fantasia)+' · CNPJ: '+(_cfg.cnpj||'_____')+' · Nº de Licença MAPA: '+(_cfg.mapa||'_____')+'<br>'+(_cfg.endereco||'')+'<br>Ano de referência: '+_sem.ano+' · '+_sem.label+'<br><small>Portaria MAPA nº 837/2025</small></h3>'+
     '<h4>RELATÓRIO COMPLETO:</h4>'+
     '<table><tr><th>Substância (DCB)</th><th>Lista</th><th>Estoque inicial (g)</th><th>Importação (g)</th><th>Aquisição (g)</th><th>Perdas (g)</th><th>Manipulação de produtos (g)</th><th>Estoque final</th></tr>';
   for(const s of SUB){
@@ -575,17 +573,16 @@ function printAnexoIX(){
     });
   }
   html+='</table>';
-  html+='<div class="sig"><hr><strong>Paulo Edson Fernandes</strong><br>Farmacêutico RT — CRF-GO 9303<br>Portaria MAPA nº 837/2025 · Art. 15</div></div>';
+  html+='<div class="sig"><hr>'+cfgSig()+'<br>Portaria MAPA nº 837/2025 · Art. 15</div></div>';
   document.getElementById('print-area').innerHTML=html;
   window.print();
 }
 
 // ═══ IMPRESSÃO — ANEXO VII (FORMATO ANTIGO — mantido para compatibilidade) ═══
 function printAnexoVII(){
-  const estab=up(document.getElementById('inp-estab').value)||'R S O MANIPULAÇÃO ANIMAL';
-  const per=document.getElementById('inp-per').value.trim()||'';
+  const _cfg=ldCfg();const _sem=getSemDates();
   let html='<div class="pr-anx"><h2>ANEXO VII — RELATÓRIO DE ESTOQUE DE SUBSTÂNCIAS SUJEITAS A CONTROLE ESPECIAL</h2>'+
-    '<h3>'+estab+' · CNPJ: _____________ · Licença MAPA: _____________<br>Ano de referência: '+new Date().getFullYear()+' · Período: '+per+'</h3>'+
+    '<h3>'+(_cfg.razao||_cfg.fantasia)+' · CNPJ: '+(_cfg.cnpj||'_____')+' · Licença MAPA: '+(_cfg.mapa||'_____')+'<br>'+(_cfg.endereco||'')+'<br>Ano de referência: '+_sem.ano+' · '+_sem.label+'</h3>'+
     '<table><tr><th>SUBSTÂNCIA (DCB)</th><th>LISTA</th><th>ESTOQUE INICIAL(g)</th><th>IMPORTAÇÃO(g)</th><th>PRODUÇÃO(g)</th><th>AQUISIÇÃO(g)</th><th>PERDAS(g)</th><th>VENDAS(g)</th><th>FABRICAÇÃO PROD. USO VET.(g)</th><th>ESTOQUE FINAL(g)</th></tr>';
   for(const s of SUB){
     const sm=getSM(s.n);
@@ -605,17 +602,16 @@ function printAnexoVII(){
     });
   }
   html+='</table>';
-  html+='<div class="sig"><hr><strong>Paulo Edson Fernandes</strong><br>Farmacêutico RT — CRF-GO 9303</div></div>';
+  html+='<div class="sig"><hr><strong>'+cfgSig()+'</div></div>';
   document.getElementById('print-area').innerHTML=html;
   window.print();
 }
 
 // ═══ IMPRESSÃO — ANEXO VIII (MOVIMENTAÇÃO PRODUTOS) ═══
 function printAnexoVIII(){
-  const estab=up(document.getElementById('inp-estab').value)||'R S O MANIPULAÇÃO ANIMAL';
-  const per=document.getElementById('inp-per').value.trim()||'';
+  const _cfg=ldCfg();const _sem=getSemDates();
   let html='<div class="pr-anx"><h2>ANEXO VIII — RELATÓRIO DE MOVIMENTAÇÃO DE ESTOQUE DE PRODUTOS DE USO VETERINÁRIO QUE CONTENHAM SUBSTÂNCIAS SUJEITAS A CONTROLE ESPECIAL</h2>'+
-    '<h3>'+estab+' · CNPJ: _____________ · Licença MAPA: _____________<br>Ano de referência: '+new Date().getFullYear()+' · Período: '+per+'</h3>'+
+    '<h3>'+(_cfg.razao||_cfg.fantasia)+' · CNPJ: '+(_cfg.cnpj||'_____')+' · Licença MAPA: '+(_cfg.mapa||'_____')+'<br>'+(_cfg.endereco||'')+'<br>Ano de referência: '+_sem.ano+' · '+_sem.label+'</h3>'+
     '<table><tr><th>SUBSTÂNCIA (DCB)</th><th>LISTA</th><th>NOME PRODUTO</th><th>Nº LICENÇA</th><th>APRESENTAÇÃO</th><th>ESTOQUE INICIAL</th><th>ENTRADAS (AQUISIÇÃO)</th><th>SAÍDAS (VENDAS)</th><th>PERDAS</th><th>ESTOQUE FINAL</th></tr>';
   for(const s of SUB){
     const sm=getSM(s.n);
@@ -634,7 +630,7 @@ function printAnexoVIII(){
     });
   }
   html+='</table>';
-  html+='<div class="sig"><hr><strong>Paulo Edson Fernandes</strong><br>Farmacêutico RT — CRF-GO 9303</div></div>';
+  html+='<div class="sig"><hr><strong>'+cfgSig()+'</div></div>';
   document.getElementById('print-area').innerHTML=html;
   window.print();
 }
