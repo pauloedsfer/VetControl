@@ -171,8 +171,8 @@ footer{margin-top:40px;text-align:center;font-family:var(--mono);font-size:.68re
 <span class="vtag">v4.2</span>
 </header>
 <div class="tabs">
-<button class="tab a" onclick="swTab('imp',this)">Importar</button>
-<button class="tab" onclick="swTab('mov',this)">Movimentos</button>
+<button class="tab a" onclick="swTab('mov',this)">Movimentos</button>
+<button class="tab" onclick="swTab('imp',this)">Importar</button>
 <button class="tab" onclick="swTab('hist',this)">Histórico</button>
 <button class="tab" onclick="swTab('help',this)">Ajuda</button>
 </div>
@@ -223,6 +223,7 @@ footer{margin-top:40px;text-align:center;font-family:var(--mono);font-size:.68re
 <div class="fd" style="margin-bottom:0"><label>Ano</label><select id="mv-ano"></select></div>
 <div class="fd" style="margin-bottom:0"><label>Semestre</label><select id="mv-sem"><option value="1">1o Sem</option><option value="2">2o Sem</option></select></div>
 <div class="fd" style="margin-bottom:0"><label>Fmt Data impressão</label><select id="mv-dtfmt"><option value="unica">dd/mm/aaaa</option><option value="sep">DIA | MÊS | ANO</option></select></div>
+<button class="bs bsm" onclick="openModal('config')" style="align-self:end">⚙ Config</button>
 <button class="bs bsm" onclick="openModal('presc')" style="align-self:end">Prescritores</button>
 <button class="bs bsm" onclick="openModal('cpf')" style="align-self:end">CPFs</button>
 </div>
