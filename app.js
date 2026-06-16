@@ -69,6 +69,7 @@ function cfgHeader(){const c=ldCfg();return(c.razao||c.fantasia)+' CNPJ: '+(c.cn
 function cfgSig(){const c=ldCfg();return'<strong>'+(c.rtNome||'RT')+'</strong><br>Farmaceutico RT - '+(c.rtCrf||'CRF');}
 function getSemDates(){const a=parseInt(document.getElementById('mv-ano').value)||new Date().getFullYear();const s=document.getElementById('mv-sem').value;if(s==='1')return{ini:a+'-01-01',fim:a+'-06-30',label:'1o Semestre '+a+' (01/01-30/06)',ano:a};return{ini:a+'-07-01',fim:a+'-12-31',label:'2o Semestre '+a+' (01/07-31/12)',ano:a};}
 function filterBySem(lancs){const{ini,fim}=getSemDates();return lancs.filter(l=>l.data&&l.data>=ini&&l.data<=fim);}
+function getLancCadMapa(l){if(l.cadMapa)return l.cadMapa;if(l.prescritor){var p=getP(l.prescritor);return p.cadMapa||'';}return '';}
 function openConfigModal(){var c=ldCfg();document.getElementById('cfg-fantasia').value=c.fantasia||'';document.getElementById('cfg-razao').value=c.razao||'';document.getElementById('cfg-cnpj').value=c.cnpj||'';document.getElementById('cfg-mapa').value=c.mapa||'';document.getElementById('cfg-endereco').value=c.endereco||'';document.getElementById('cfg-rt-nome').value=c.rtNome||'';document.getElementById('cfg-rt-crf').value=c.rtCrf||'';document.getElementById('mo-config').classList.add('a');}
 function saveConfig(){svCfg({fantasia:document.getElementById('cfg-fantasia').value.trim(),razao:document.getElementById('cfg-razao').value.trim(),cnpj:document.getElementById('cfg-cnpj').value.trim(),mapa:document.getElementById('cfg-mapa').value.trim(),endereco:document.getElementById('cfg-endereco').value.trim(),rtNome:document.getElementById('cfg-rt-nome').value.trim(),rtCrf:document.getElementById('cfg-rt-crf').value.trim()});closeModal('config');document.getElementById('inp-estab').value=ldCfg().fantasia||'';}
 
@@ -482,7 +483,7 @@ function printCorpo(){
     // Outras informações conforme Art 11 §4
     let info='';
     if(l.tipo==='saida'){
-      info=[l.tutor,l.cpf?'CPF:'+l.cpf:'',l.nrReceita?'Rec:'+l.nrReceita:'',l.prescritor?'CRMV-'+(l.crmvUf||'GO')+' '+l.crmvNr:'',l.cadMapa?'MAPA:'+l.cadMapa:''].filter(Boolean).join(' | ');
+      info=[l.tutor,l.cpf?'CPF:'+l.cpf:'',l.nrReceita?'Rec:'+l.nrReceita:'',l.prescritor?'CRMV-'+(l.crmvUf||'GO')+' '+l.crmvNr:'',getLancCadMapa(l)?'MAPA:'+getLancCadMapa(l):''].filter(Boolean).join(' | ');
     } else if(l.tipo==='entrada'){
       info=['ENTRADA',l.nrPartida?'Partida:'+l.nrPartida:'',l.nfNumero?'NF:'+l.nfNumero:'',l.cnpjFornecedor?'CNPJ:'+l.cnpjFornecedor:'',l.fornecedor||l.descricao].filter(Boolean).join(' | ');
     } else {
@@ -570,7 +571,7 @@ function printAnexoIX(){
   for(const s of SUB){
     const sm=getSM(s.n);
     sm.lancamentos.filter(l=>l.tipo==='saida').forEach(l=>{
-      html+='<tr><td>'+s.n+'</td><td>'+s.l+'</td><td>'+l.qtd.toFixed(4)+'</td><td>'+(l.cpf||'')+'</td><td>'+(l.tutor||'')+'</td><td>'+(l.prescritor||'')+'</td><td>'+(l.cadMapa||'')+'</td><td>'+(l.nrOm||'')+'</td><td>'+(l.nrDoc||'')+'</td><td>'+(l.data||'')+'</td></tr>';
+      html+='<tr><td>'+s.n+'</td><td>'+s.l+'</td><td>'+l.qtd.toFixed(4)+'</td><td>'+(l.cpf||'')+'</td><td>'+(l.tutor||'')+'</td><td>'+(l.prescritor||'')+'</td><td>'+getLancCadMapa(l)+'</td><td>'+(l.nrOm||'')+'</td><td>'+(l.nrDoc||'')+'</td><td>'+(l.data||'')+'</td></tr>';
     });
   }
   html+='</table>';
@@ -629,7 +630,7 @@ function printAnexoVIII(){
   for(const s of SUB){
     const sm=getSM(s.n);
     sm.lancamentos.filter(l=>l.tipo==='saida').forEach(l=>{
-      html+='<tr><td>'+s.n+'</td><td>'+s.l+'</td><td>'+l.qtd.toFixed(4)+'</td><td>'+(l.cpf||'')+'</td><td>'+(l.tutor||'')+'</td><td>'+(l.cadMapa||'')+'</td><td>'+(l.crmvNr?'CRMV-'+(l.crmvUf||'GO')+' '+l.crmvNr:'')+'</td><td>'+(l.nrReceita||'')+'</td><td>'+(l.nrOm||'')+'</td><td>'+(l.data||'')+'</td></tr>';
+      html+='<tr><td>'+s.n+'</td><td>'+s.l+'</td><td>'+l.qtd.toFixed(4)+'</td><td>'+(l.cpf||'')+'</td><td>'+(l.tutor||'')+'</td><td>'+getLancCadMapa(l)+'</td><td>'+(l.crmvNr?'CRMV-'+(l.crmvUf||'GO')+' '+l.crmvNr:'')+'</td><td>'+(l.nrReceita||'')+'</td><td>'+(l.nrOm||'')+'</td><td>'+(l.data||'')+'</td></tr>';
     });
   }
   html+='</table>';
