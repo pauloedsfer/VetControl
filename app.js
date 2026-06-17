@@ -1,7 +1,8 @@
 /**
- * CONTROLADOS v4.0 — R S O MANIPULAÇÃO ANIMAL
+ * CONTROLADOS v5.0 — R S O MANIPULAÇÃO ANIMAL
  * Movimentos como fonte única de verdade
- * Conformidade IN 35/2017 MAPA
+ * Conformidade Portaria MAPA nº 837/2025
+ * v5.0: Parser de PDF MAPA (CPFs + Cadastro SIPEAGRO)
  */
 
 // ═══ CONSTANTES ═══
@@ -658,7 +659,7 @@ function delHist(id){if(!confirm('Excluir?'))return;svH(ldH().filter(r=>r.id!==i
 
 // ═══ BACKUP ═══
 function exportarBackup(){
-  const data={versao:4,exportadoEm:new Date().toISOString(),historico:ldH(),cpfs:ldC(),enderecos:ldE(),prescritores:ldP(),movimentos:ldM()};
+  const data={versao:5,exportadoEm:new Date().toISOString(),historico:ldH(),cpfs:ldC(),enderecos:ldE(),prescritores:ldP(),movimentos:ldM()};
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);
   a.download='backup_controlados_'+new Date().toISOString().slice(0,10)+'.json';a.click();
@@ -746,9 +747,417 @@ function migrateV3toV4(hist, cpfs, enderecos, prescritores){
   }
 }
 
+// ═══ PDF PARSER — RELATÓRIO MAPA (v5.0) ═══
+let pdfFileData=null;
+let pdfParsedVendas=[];
+let pdfParsedCpfs={};
+let pdfParsedPrescs={};
+
+function setupPdfDZ(){
+  const z=document.getElementById('z-pdf'),inp=document.getElementById('f-pdf'),fn=document.getElementById('fn-pdf');
+  inp.addEventListener('change',e=>{if(e.target.files[0])readPdfFile(e.target.files[0],fn,z);});
+  z.addEventListener('dragover',e=>{e.preventDefault();z.classList.add('dov');});
+  z.addEventListener('dragleave',()=>z.classList.remove('dov'));
+  z.addEventListener('drop',e=>{e.preventDefault();z.classList.remove('dov');if(e.dataTransfer.files[0])readPdfFile(e.dataTransfer.files[0],fn,z);});
+}
+function readPdfFile(file,fn,z){
+  const r=new FileReader();
+  r.onload=e=>{pdfFileData=new Uint8Array(e.target.result);fn.textContent='✓ '+file.name;z.classList.add('rdy');document.getElementById('btn-pdf').disabled=false;pdfLog('PDF carregado: '+file.name,'ok');};
+  r.readAsArrayBuffer(file);
+}
+function pdfSetP(p,t){const el=document.getElementById('pw-pdf');el.style.display='block';document.getElementById('pb-pdf').style.width=p+'%';document.getElementById('ptx-pdf').textContent=t;}
+function pdfLog(m,t){const b=document.getElementById('lb-pdf');b.style.display='block';const l=document.createElement('div');if(t)l.className='l'+t[0];l.textContent=m;b.appendChild(l);b.scrollTop=b.scrollHeight;}
+
+document.getElementById('btn-pdf').addEventListener('click',async()=>{
+  if(!pdfFileData)return;
+  const btn=document.getElementById('btn-pdf');
+  btn.disabled=true;btn.innerHTML='<div class="spinner"></div> Processando PDF...';
+  document.getElementById('lb-pdf').innerHTML='';
+  document.getElementById('pdf-rev-wr').style.display='none';
+  await new Promise(r=>setTimeout(r,50));
+  try{
+    pdfSetP(10,'Carregando PDF...');
+    const pdf=await pdfjsLib.getDocument({data:pdfFileData}).promise;
+    pdfLog('PDF: '+pdf.numPages+' páginas','ok');
+    pdfSetP(20,'Extraindo texto...');
+    
+    const allPages=[];
+    for(let i=1;i<=pdf.numPages;i++){
+      const page=await pdf.getPage(i);
+      const tc=await page.getTextContent();
+      const vp=page.getViewport({scale:1});
+      const items=tc.items.map(it=>({
+        str:it.str,x:Math.round(it.transform[4]),y:Math.round(vp.height-it.transform[5]),w:it.width,h:it.height
+      }));
+      allPages.push({pageNum:i,items,width:vp.width,height:vp.height});
+      pdfSetP(20+Math.round(40*i/pdf.numPages),'Página '+i+'/'+pdf.numPages);
+    }
+    
+    pdfSetP(65,'Identificando páginas de VENDAS...');
+    const vendasPages=[];
+    for(const pg of allPages){
+      const fullText=pg.items.map(it=>it.str).join(' ');
+      if(fullText.includes('VENDAS DE PRODUTOS')&&fullText.includes('SUBSTÂNCIA'))vendasPages.push(pg);
+    }
+    pdfLog('Páginas de VENDAS: '+vendasPages.length,'ok');
+    
+    pdfSetP(70,'Parseando tabelas de VENDAS...');
+    const vendas=[];
+    for(const pg of vendasPages){
+      const rows=pdfGroupRows(pg.items);
+      const colBounds=pdfDetectColumns(rows,pg.width);
+      if(!colBounds){pdfLog('Pág '+pg.pageNum+': cabeçalho não encontrado','warn');continue;}
+      const dataRows=pdfExtractDataRows(rows,colBounds);
+      vendas.push(...dataRows);
+      pdfLog('Pág '+pg.pageNum+': '+dataRows.length+' registros','ok');
+    }
+    
+    pdfSetP(85,'Construindo cadastros...');
+    pdfParsedVendas=vendas;
+    pdfParsedCpfs={};
+    pdfParsedPrescs={};
+    let newCpf=0,newPresc=0;
+    const existCpfs=ldC();
+    const existPrescs=ldP();
+    for(const v of vendas){
+      if(v.cpf&&v.tutor){
+        const k=nn(v.tutor);
+        const isNew=!existCpfs[k];
+        pdfParsedCpfs[k]={cpf:v.cpf,isNew};
+        if(isNew)newCpf++;
+      }
+      if(v.prescritor&&v.cadSipeagro){
+        const k=nn(v.prescritor);
+        const cur=existPrescs[k]||{};
+        const isNew=!cur.cadMapa;
+        pdfParsedPrescs[k]={cadSipeagro:v.cadSipeagro,isNew};
+        if(isNew)newPresc++;
+      }
+    }
+    
+    pdfSetP(95,'Renderizando...');
+    pdfLog('CPFs extraídos: '+Object.keys(pdfParsedCpfs).length+' ('+newCpf+' novos)','ok');
+    pdfLog('Prescritores com SIPEAGRO: '+Object.keys(pdfParsedPrescs).length+' ('+newPresc+' novos)','ok');
+    pdfLog('Total vendas: '+vendas.length,'ok');
+    
+    renderPdfReview();
+    pdfSetP(100,'Pronto!');
+  }catch(err){pdfLog('ERRO: '+err.message,'err');console.error(err);}
+  finally{btn.disabled=false;btn.textContent='Processar PDF';}
+});
+
+function pdfGroupRows(items){
+  // Group items by Y coordinate with tolerance
+  const rows={};const tol=4;
+  for(const it of items){
+    if(!it.str.trim())continue;
+    let found=false;
+    for(const yk of Object.keys(rows)){
+      if(Math.abs(it.y-parseFloat(yk))<=tol){rows[yk].push(it);found=true;break;}
+    }
+    if(!found)rows[it.y]=[it];
+  }
+  // Sort rows top→bottom, items left→right
+  return Object.entries(rows).sort((a,b)=>parseFloat(a[0])-parseFloat(b[0])).map(([y,its])=>({y:parseFloat(y),items:its.sort((a,b)=>a.x-b.x)}));
+}
+
+function pdfDetectColumns(rows,pgWidth){
+  // The MAPA PDF has multi-row headers. Scan the first ~15 rows for column header keywords.
+  const cols={};
+  const hdrLimit=Math.min(rows.length,15);
+  for(let ri=0;ri<hdrLimit;ri++){
+    for(const it of rows[ri].items){
+      const s=it.str.trim();
+      if(s.includes('SUBSTÂNCIA'))cols.substancia=it.x;
+      if(s==='Lista')cols.lista=it.x;
+      if(s.includes('Quantidade'))cols.qtd=it.x;
+      if(s.includes('CNPJ/CPF'))cols.cpf=it.x;
+      if(s.includes('Nome do Adquirente')||s==='Nome do Adquirente')cols.tutor=it.x;
+      // "Prescritor" appears standalone (not inside other text)
+      if(s==='Prescritor')cols.prescritor=it.x;
+      if(s.includes('Cadastro do')||s.includes('SIPEAGRO'))cols.cadSipeagro=Math.min(cols.cadSipeagro||9999,it.x);
+      if(s.includes('Número da')||s.includes('Ordem de'))cols.nrOM=Math.min(cols.nrOM||9999,it.x);
+      if(s==='Nota Fiscal')cols.nf=it.x;
+      if(s==='Data'&&it.x>pgWidth*0.7)cols.data=it.x;// "Data" near right edge
+    }
+  }
+  // Infer missing tutor column from cpf position + offset
+  if(!cols.tutor&&cols.cpf)cols.tutor=cols.cpf+80;
+  // Infer prescritor from midpoint if not found
+  if(!cols.prescritor&&cols.tutor&&(cols.cadSipeagro||cols.nrOM||cols.nf)){
+    const rightBound=cols.cadSipeagro||cols.nrOM||cols.nf||cols.data;
+    cols.prescritor=Math.round((cols.tutor+rightBound)/2);
+  }
+  if(cols.cpf!==undefined)return cols;
+  // Last resort: try to detect from data patterns
+  return pdfDetectColumnsFromData(rows);
+}
+
+function pdfDetectColumnsFromData(rows){
+  // Try to infer columns from data patterns
+  const subNames=['GABAPENTINA','FLUOXETINA','AMITRIPTILINA','SELEGILINA','TRAMADOL','CODEÍNA','CODEINA','RIBAVIRINA'];
+  for(const row of rows){
+    const text=row.items.map(it=>it.str).join('');
+    const hasSub=subNames.some(s=>text.includes(s));
+    const hasDate=/\d{2}\/\d{2}\/\d{4}/.test(text);
+    const hasCpf=/\d{11}/.test(text.replace(/[.,\s]/g,''));
+    if(hasSub&&hasDate&&hasCpf){
+      const cols={};
+      for(const it of row.items){
+        const s=it.str.trim();
+        if(subNames.includes(s.toUpperCase()))cols.substancia=it.x;
+        if(s==='C1'||s==='A2')cols.lista=it.x;
+        if(/^\d{11}$/.test(s.replace(/\D/g,'')))cols.cpf=it.x;
+        if(/^\d{2}\/\d{2}\/\d{4}$/.test(s))cols.data=it.x;
+      }
+      if(cols.cpf!==undefined&&cols.data!==undefined)return cols;
+    }
+  }
+  return null;
+}
+
+function pdfExtractDataRows(rows,colBounds){
+  const subNames=['GABAPENTINA','FLUOXETINA','AMITRIPTILINA','SELEGILINA','TRAMADOL','CODEÍNA','CODEINA','RIBAVIRINA'];
+  const results=[];
+  // Also handle continuation lines (where a name wraps to next line)
+  let pendingRow=null;
+  
+  for(const row of rows){
+    const allText=row.items.map(it=>it.str).join(' ');
+    // Skip header/footer rows
+    if(allText.includes('SUBSTÂNCIA')||allText.includes('Página')||allText.includes('Assinatura')||allText.includes('RELATÓRIO')||allText.includes('Razão Social')||allText.includes('Endereço')||allText.includes('Exercício')||allText.includes('Periodicidade')||allText.includes('CNPJ:'))continue;
+    if(allText.includes('Lista')&&allText.includes('Quantidade'))continue;
+    if(allText.includes('Prescritor')&&allText.includes('Cadastro'))continue;
+    if(allText.includes('Nota Fiscal')&&allText.includes('Data'))continue;
+    
+    // Check if this row starts with a known substance
+    const firstWord=row.items.length>0?row.items[0].str.trim().toUpperCase():'';
+    const hasSub=subNames.includes(firstWord)||(firstWord==='CODEINA');
+    
+    if(hasSub){
+      // If we had a pending row, finalize it
+      if(pendingRow)results.push(pendingRow);
+      // Parse this row
+      pendingRow=pdfParseVendaRow(row,colBounds);
+    } else if(pendingRow){
+      // This might be a continuation line — append names
+      pdfMergeContinuation(pendingRow,row,colBounds);
+    }
+  }
+  if(pendingRow)results.push(pendingRow);
+  return results;
+}
+
+function pdfParseVendaRow(row,cols){
+  const rec={substancia:'',lista:'',qtd:0,cpf:'',tutor:'',prescritor:'',cadSipeagro:'',num1:'',num2:'',data:'',dataObj:null};
+  
+  // Sort all text items and assign to columns based on X position
+  // Build column boundaries (midpoints between known column X positions)
+  const cKeys=Object.keys(cols).filter(k=>cols[k]!==undefined).sort((a,b)=>cols[a]-cols[b]);
+  
+  // Simple approach: assign each text item to nearest column
+  for(const it of row.items){
+    const s=it.str.trim();
+    if(!s)continue;
+    const x=it.x;
+    
+    // Use pattern matching to assign
+    const subNames=['GABAPENTINA','FLUOXETINA','AMITRIPTILINA','SELEGILINA','TRAMADOL','CODEÍNA','CODEINA','RIBAVIRINA'];
+    if(subNames.includes(s.toUpperCase())){rec.substancia=s.toUpperCase().replace('CODEINA','CODEÍNA');continue;}
+    if(s==='C1'||s==='A2'){rec.lista=s;continue;}
+    
+    // Date pattern
+    const dm=/^(\d{2})\/(\d{2})\/(\d{4})$/.exec(s);
+    if(dm){rec.data=s;rec.dataObj=new Date(parseInt(dm[3]),parseInt(dm[2])-1,parseInt(dm[1]));continue;}
+    
+    // SIPEAGRO pattern: NNNNN/YYYY or NNNNNN/YYYY
+    if(/^\d{3,6}\/\d{4}$/.test(s)){rec.cadSipeagro=s;continue;}
+    
+    // Quantity pattern (comma decimal)
+    if(/^\d+,\d{4}$/.test(s)){rec.qtd=parseFloat(s.replace(',','.'));continue;}
+    
+    // CPF (11 digits, possibly with dots/dash)
+    const cpfClean=s.replace(/\D/g,'');
+    if(cpfClean.length===11&&/^\d{11}$/.test(cpfClean)){rec.cpf=cpfClean;continue;}
+    
+    // 5-digit numbers (NF or OM)
+    if(/^\d{4,6}$/.test(s)){
+      if(!rec.num1)rec.num1=s;
+      else rec.num2=s;
+      continue;
+    }
+    
+    // Remaining text: assign to tutor or prescritor based on X position
+    if(cols.prescritor!==undefined&&x>=cols.prescritor-15&&cols.cadSipeagro!==undefined&&x<cols.cadSipeagro-15){
+      rec.prescritor=(rec.prescritor?rec.prescritor+' ':'')+s;
+    } else if(cols.tutor!==undefined&&x>=cols.tutor-15&&cols.prescritor!==undefined&&x<cols.prescritor-15){
+      rec.tutor=(rec.tutor?rec.tutor+' ':'')+s;
+    } else if(cols.cpf!==undefined&&x<(cols.tutor||cols.prescritor||9999)-15){
+      // Might be part of CPF column area but not matching CPF format — could be continuation
+    } else if(x>(cols.cpf||0)&&x<(cols.data||9999)){
+      // Generic text in the name area — try to classify by position
+      const midPresc=cols.prescritor||((cols.tutor||0)+(cols.cadSipeagro||cols.nrOM||cols.data||999))/2;
+      if(x>=midPresc-15)rec.prescritor=(rec.prescritor?rec.prescritor+' ':'')+s;
+      else rec.tutor=(rec.tutor?rec.tutor+' ':'')+s;
+    }
+  }
+  
+  // Normalize
+  rec.substancia=up(rec.substancia);
+  rec.tutor=up(rec.tutor);
+  rec.prescritor=up(rec.prescritor);
+  
+  // Determine which num is OM (smaller ~32xxx) and which is NF (larger ~36xxx)
+  // The OM numbers in the existing system are the smaller ones
+  const n1=parseInt(rec.num1),n2=parseInt(rec.num2);
+  if(!isNaN(n1)&&!isNaN(n2)){
+    // In the PDF column order: NrOM comes before NF
+    // But the actual values: NrOM matches existing nrOm from XLS import
+    // From the data, OM numbers are like 32xxx-33xxx and NF/Doc are like 36xxx-38xxx
+    if(n1>n2){rec.nrDoc=rec.num1;rec.nrOm=rec.num2;}
+    else{rec.nrDoc=rec.num2;rec.nrOm=rec.num1;}
+  } else {
+    rec.nrOm=rec.num1||'';rec.nrDoc=rec.num2||'';
+  }
+  
+  return rec;
+}
+
+function pdfMergeContinuation(rec,row,cols){
+  // Merge continuation line text into the pending record
+  for(const it of row.items){
+    const s=it.str.trim();if(!s)continue;
+    const x=it.x;
+    // Skip structural items
+    if(s.includes('Página')||s.includes('Assinatura'))return;
+    
+    // Assign based on X position
+    const midPresc=cols.prescritor||0;
+    if(cols.prescritor!==undefined&&x>=cols.prescritor-15&&cols.cadSipeagro!==undefined&&x<cols.cadSipeagro-15){
+      rec.prescritor=(rec.prescritor?rec.prescritor+' ':'')+s;
+    } else if(cols.tutor!==undefined&&x>=cols.tutor-15&&x<midPresc-15){
+      rec.tutor=(rec.tutor?rec.tutor+' ':'')+s;
+    } else if(x>(cols.cpf||0)&&x<(cols.data||9999)){
+      if(x>=midPresc-15)rec.prescritor=(rec.prescritor?rec.prescritor+' ':'')+s;
+      else rec.tutor=(rec.tutor?rec.tutor+' ':'')+s;
+    }
+  }
+  rec.tutor=up(rec.tutor);
+  rec.prescritor=up(rec.prescritor);
+}
+
+function renderPdfReview(){
+  document.getElementById('pdf-rev-wr').style.display='block';
+  
+  // CPFs table
+  const cpfEntries=Object.entries(pdfParsedCpfs).sort((a,b)=>a[0].localeCompare(b[0]));
+  let newC=cpfEntries.filter(([,v])=>v.isNew).length;
+  document.getElementById('pdf-cpf-cnt').textContent=cpfEntries.length+' tutores com CPF ('+newC+' novos, não cadastrados)';
+  let h='<thead><tr><th></th><th>Tutor</th><th>CPF</th><th>Status</th></tr></thead><tbody>';
+  cpfEntries.forEach(([nome,v],i)=>{
+    const cls=v.isNew?' class="rw-w"':'';
+    h+='<tr'+cls+'><td>'+(i+1)+'</td><td>'+esc(nome)+'</td><td>'+esc(fmtCPF(v.cpf))+'</td><td>'+(v.isNew?'<span style="color:var(--gn);font-weight:700">NOVO</span>':'Existente')+'</td></tr>';
+  });
+  h+='</tbody>';
+  document.getElementById('pdf-cpf-tbl').innerHTML=h;
+  
+  // Prescritores table
+  const prescEntries=Object.entries(pdfParsedPrescs).sort((a,b)=>a[0].localeCompare(b[0]));
+  let newP=prescEntries.filter(([,v])=>v.isNew).length;
+  document.getElementById('pdf-presc-cnt').textContent=prescEntries.length+' prescritores com SIPEAGRO ('+newP+' novos)';
+  h='<thead><tr><th></th><th>Prescritor</th><th>Cadastro SIPEAGRO</th><th>Status</th></tr></thead><tbody>';
+  prescEntries.forEach(([nome,v],i)=>{
+    const cls=v.isNew?' class="rw-w"':'';
+    h+='<tr'+cls+'><td>'+(i+1)+'</td><td>'+esc(nome)+'</td><td>'+esc(v.cadSipeagro)+'</td><td>'+(v.isNew?'<span style="color:var(--gn);font-weight:700">NOVO</span>':'Existente')+'</td></tr>';
+  });
+  h+='</tbody>';
+  document.getElementById('pdf-presc-tbl').innerHTML=h;
+  
+  // Vendas table
+  document.getElementById('pdf-vendas-cnt').textContent=pdfParsedVendas.length+' dispensações extraídas';
+  h='<thead><tr><th>#</th><th>Substância</th><th>Qtd(g)</th><th>CPF</th><th>Tutor</th><th>Prescritor</th><th>SIPEAGRO</th><th>OM</th><th>Doc</th><th>Data</th></tr></thead><tbody>';
+  pdfParsedVendas.forEach((v,i)=>{
+    const warn=!v.cpf||!v.prescritor?'rw-w':'';
+    h+='<tr class="'+warn+'"><td>'+(i+1)+'</td><td>'+esc(v.substancia)+'</td><td>'+(v.qtd?v.qtd.toFixed(4):'')+'</td><td>'+esc(fmtCPF(v.cpf))+'</td><td>'+esc(v.tutor)+'</td><td>'+esc(v.prescritor)+'</td><td>'+esc(v.cadSipeagro)+'</td><td>'+esc(v.nrOm)+'</td><td>'+esc(v.nrDoc)+'</td><td>'+esc(v.data)+'</td></tr>';
+  });
+  h+='</tbody>';
+  document.getElementById('pdf-vendas-tbl').innerHTML=h;
+  
+  document.getElementById('pdf-rev-wr').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+function importPdfData(){
+  if(!pdfParsedVendas.length){alert('Nenhum dado extraído. Processe o PDF primeiro.');return;}
+  
+  let addedCpf=0,updCpf=0;
+  const cpfs=ldC();
+  for(const[nome,v]of Object.entries(pdfParsedCpfs)){
+    if(v.cpf){
+      if(!cpfs[nome]){addedCpf++;}else if(cpfs[nome]!==v.cpf){updCpf++;}
+      cpfs[nome]=v.cpf;
+    }
+  }
+  svC(cpfs);
+  
+  let addedPresc=0,updPresc=0;
+  const prescs=ldP();
+  for(const[nome,v]of Object.entries(pdfParsedPrescs)){
+    if(v.cadSipeagro){
+      if(!prescs[nome]){
+        prescs[nome]={crmv:'',uf:'GO',cadMapa:v.cadSipeagro};
+        addedPresc++;
+      } else if(!prescs[nome].cadMapa||prescs[nome].cadMapa!==v.cadSipeagro){
+        if(!prescs[nome].cadMapa)addedPresc++;else updPresc++;
+        prescs[nome].cadMapa=v.cadSipeagro;
+      }
+    }
+  }
+  svP(prescs);
+  
+  pdfLog('✓ CPFs importados: '+addedCpf+' novos, '+updCpf+' atualizados','ok');
+  pdfLog('✓ Prescritores SIPEAGRO: '+addedPresc+' novos, '+updPresc+' atualizados','ok');
+  alert('Cadastros atualizados!\n'+addedCpf+' CPFs novos\n'+addedPresc+' cadastros SIPEAGRO novos');
+}
+
+function enrichMovFromPdf(){
+  if(!pdfParsedVendas.length){alert('Nenhum dado extraído. Processe o PDF primeiro.');return;}
+  
+  // Build maps for quick lookup
+  const vendaByOM={};
+  for(const v of pdfParsedVendas){
+    if(v.nrOm)vendaByOM[v.nrOm]=v;
+  }
+  
+  const movs=ldM();
+  let enriched=0;
+  for(const sn of Object.keys(movs)){
+    const s=movs[sn];if(!s||!s.lancamentos)continue;
+    for(const l of s.lancamentos){
+      if(l.tipo!=='saida')continue;
+      const om=l.nrOm;if(!om)continue;
+      const v=vendaByOM[om];if(!v)continue;
+      
+      // Enrich CPF
+      if(!l.cpf&&v.cpf){l.cpf=v.cpf;enriched++;}
+      // Enrich Cadastro MAPA
+      if(!l.cadMapa&&v.cadSipeagro){l.cadMapa=v.cadSipeagro;enriched++;}
+      // Enrich tutor if empty
+      if(!l.tutor&&v.tutor)l.tutor=v.tutor;
+      // Enrich prescritor if empty  
+      if(!l.prescritor&&v.prescritor)l.prescritor=v.prescritor;
+    }
+  }
+  svM(movs);
+  
+  pdfLog('✓ '+enriched+' campos enriquecidos nos movimentos existentes','ok');
+  alert(enriched+' campos enriquecidos nos movimentos existentes!');
+  renderMov();
+}
+
 // ═══ INIT ═══
 setupDZ('z-m','f-m','fn-m','m');
 setupDZ('z-c','f-c','fn-c','c');
+setupPdfDZ();
 document.getElementById('mv-sub').innerHTML=SUB.map(s=>'<option value="'+s.n+'">'+s.n+' ('+s.l+')</option>').join('');
 var ySel=document.getElementById('mv-ano');var cY=new Date().getFullYear();for(var y=cY-2;y<=cY+1;y++){var o=document.createElement('option');o.value=y;o.textContent=y;if(y===cY)o.selected=true;ySel.appendChild(o);}
 document.getElementById('mv-sem').value=new Date().getMonth()<6?'1':'2';
