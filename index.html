@@ -3,9 +3,11 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>Controlados · Fórmula Animal v4</title>
+<title>Controlados · Fórmula Animal v5</title>
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -168,7 +170,7 @@ footer{margin-top:40px;text-align:center;font-family:var(--mono);font-size:.68re
 <header>
 <div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg></div>
 <div class="hdr"><h1>Controlados</h1><p>R S O MANIPULAÇÃO ANIMAL · GO 0198-8</p></div>
-<span class="vtag">v4.2</span>
+<span class="vtag">v5.0</span>
 </header>
 <div class="tabs">
 <button class="tab a" onclick="swTab('mov',this)">Movimentos</button>
@@ -212,6 +214,41 @@ footer{margin-top:40px;text-align:center;font-family:var(--mono);font-size:.68re
 
 <div class="pw" id="pw"><div class="pt"><div class="pb" id="pb"></div></div><div class="ptx" id="ptx">Aguardando...</div></div>
 <div class="lb" id="lb"></div>
+
+<div class="sl" style="margin-top:24px">03 · Importar PDF do Relatório MAPA</div>
+<div class="cd">
+<div class="dz" id="z-pdf"><input type="file" id="f-pdf" accept=".pdf"/><span class="di">📑</span><span class="dl">Relatório MAPA (PDF)</span><span class="dh">Extrai CPFs dos tutores e Cadastros SIPEAGRO dos prescritores</span><div class="df" id="fn-pdf"></div></div>
+<button class="bp" id="btn-pdf" disabled style="margin-top:10px">Processar PDF</button>
+<div class="pw" id="pw-pdf" style="display:none;margin-top:10px"><div class="pt"><div class="pb" id="pb-pdf"></div></div><div class="ptx" id="ptx-pdf">Aguardando...</div></div>
+<div class="lb" id="lb-pdf" style="display:none"></div>
+</div>
+
+<div class="rw" id="pdf-rev-wr" style="display:none">
+<div class="sl">04 · Dados extraídos do PDF MAPA</div>
+
+<div class="cd" style="padding:12px">
+<div style="font-family:var(--dsp);font-size:.82rem;font-weight:700;color:var(--acd);margin-bottom:6px">CPFs dos Tutores</div>
+<div style="font-family:var(--mono);font-size:.66rem;color:var(--mt);margin-bottom:6px" id="pdf-cpf-cnt"></div>
+<div style="overflow-x:auto;max-height:30vh;overflow-y:auto"><table class="rt" id="pdf-cpf-tbl"></table></div>
+</div>
+
+<div class="cd" style="padding:12px;margin-top:10px">
+<div style="font-family:var(--dsp);font-size:.82rem;font-weight:700;color:var(--acd);margin-bottom:6px">Cadastros SIPEAGRO dos Prescritores</div>
+<div style="font-family:var(--mono);font-size:.66rem;color:var(--mt);margin-bottom:6px" id="pdf-presc-cnt"></div>
+<div style="overflow-x:auto;max-height:30vh;overflow-y:auto"><table class="rt" id="pdf-presc-tbl"></table></div>
+</div>
+
+<div class="cd" style="padding:12px;margin-top:10px">
+<div style="font-family:var(--dsp);font-size:.82rem;font-weight:700;color:var(--acd);margin-bottom:6px">Vendas (dispensações)</div>
+<div style="font-family:var(--mono);font-size:.66rem;color:var(--mt);margin-bottom:6px" id="pdf-vendas-cnt"></div>
+<div style="overflow-x:auto;max-height:40vh;overflow-y:auto"><table class="rt" id="pdf-vendas-tbl"></table></div>
+</div>
+
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+<button class="bg" id="btn-pdf-import" style="width:auto;padding:12px 24px" onclick="importPdfData()">✓ Importar CPFs + Prescritores → Cadastros</button>
+<button class="bp" id="btn-pdf-enrich" style="width:auto;padding:12px 24px" onclick="enrichMovFromPdf()">↑ Enriquecer Movimentos existentes</button>
+</div>
+</div>
 </div>
 
 <!-- ═══ TAB MOVIMENTOS ═══ -->
@@ -272,14 +309,15 @@ footer{margin-top:40px;text-align:center;font-family:var(--mono);font-size:.68re
 
 <!-- ═══ TAB AJUDA ═══ -->
 <div class="tp" id="tp-help">
-<div class="sl">Passo a passo — v4.0</div>
+<div class="sl">Passo a passo — v5.0</div>
 <div class="cd" style="line-height:1.7;font-size:.82rem;color:var(--mt)">
-<p><strong style="color:var(--tx)">1. Importar:</strong> Faça upload dos XLS do Farma Fácil, revise e confirme. Os dados vão direto para os Movimentos.</p>
-<p style="margin-top:8px"><strong style="color:var(--tx)">2. Movimentos (hub central):</strong> Visualize por substância, selecione registros, imprima Corpo, Etiquetas, Anexo IX (manipuladores), VII e VIII. Adicione entradas (NF, CNPJ, Nº Partida) e perdas.</p>
-<p style="margin-top:8px"><strong style="color:var(--tx)">3. Impressão:</strong> O Corpo inclui coluna ASSINATURA DO RT. "Outras informações" inclui CPF, Nº Partida, CNPJ fornecedor, Cadastro MAPA do prescritor — conforme Art. 11 §4 da Portaria MAPA nº 837/2025.</p>
-<p style="margin-top:8px"><strong style="color:var(--tx)">4. Prescritores:</strong> Cadastro salva CRMV + UF + Cadastro MAPA (SIPEAGRO). Formato: "CRMV-GO 1234".</p>
-<p style="margin-top:8px"><strong style="color:var(--tx)">5. Estoque:</strong> O estoque inicial é automaticamente o saldo final dos movimentos. Edite apenas na abertura do semestre.</p>
-<p style="margin-top:8px"><strong style="color:var(--tx)">6. Backup:</strong> Exporte regularmente. O sistema avisa após 7 dias sem backup.</p>
+<p><strong style="color:var(--tx)">1. Importar XLS:</strong> Faça upload dos XLS do Farma Fácil, revise e confirme. Os dados vão direto para os Movimentos.</p>
+<p style="margin-top:8px"><strong style="color:var(--tx)">2. Importar PDF MAPA:</strong> Faça upload do relatório PDF gerado pelo Farma Fácil. O sistema extrai CPFs dos tutores e Cadastros SIPEAGRO dos prescritores automaticamente. Revise e confirme para popular os cadastros.</p>
+<p style="margin-top:8px"><strong style="color:var(--tx)">3. Movimentos (hub central):</strong> Visualize por substância, selecione registros, imprima Corpo, Etiquetas, Anexo IX (manipuladores), VII e VIII. Adicione entradas (NF, CNPJ, Nº Partida) e perdas.</p>
+<p style="margin-top:8px"><strong style="color:var(--tx)">4. Impressão:</strong> O Corpo inclui coluna ASSINATURA DO RT. "Outras informações" inclui CPF, Nº Partida, CNPJ fornecedor, Cadastro MAPA do prescritor — conforme Art. 11 §4 da Portaria MAPA nº 837/2025.</p>
+<p style="margin-top:8px"><strong style="color:var(--tx)">5. Prescritores:</strong> Cadastro salva CRMV + UF + Cadastro MAPA (SIPEAGRO). Formato: "CRMV-GO 1234".</p>
+<p style="margin-top:8px"><strong style="color:var(--tx)">6. Estoque:</strong> O estoque inicial é automaticamente o saldo final dos movimentos. Edite apenas na abertura do semestre.</p>
+<p style="margin-top:8px"><strong style="color:var(--tx)">7. Backup:</strong> Exporte regularmente. O sistema avisa após 7 dias sem backup.</p>
 </div>
 <div class="cd" style="font-family:var(--mono);font-size:.7rem;color:var(--mt);line-height:1.6">
 ⚠ Todos os dados (CPFs, endereços, prescritores, movimentos, histórico) ficam no <strong>localStorage</strong>. Não limpe os dados do navegador sem exportar backup.
@@ -300,7 +338,7 @@ footer{margin-top:40px;text-align:center;font-family:var(--mono);font-size:.68re
 </div><div class="brow" style="margin-top:16px"><button class="bg" style="padding:10px 20px;width:auto" onclick="saveConfig()">Salvar</button></div></div></div>
 <footer>
 <p>R S O Manipulação Animal · Paulo Edson Fernandes — CRF-GO 9303 · GO 0198-8</p>
-<p style="margin-top:3px">Processamento 100% local — nenhum dado enviado a servidores · Portaria MAPA nº 837/2025</p>
+<p style="margin-top:3px">Processamento 100% local — nenhum dado enviado a servidores · Portaria MAPA nº 837/2025 · v5.0</p>
 </footer>
 </div>
 <div id="print-area"></div>
