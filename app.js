@@ -29,6 +29,8 @@ function fmtD(d){if(!d)return'';if(typeof d==='string'){const x=new Date(d);if(!
 function fmtDiso(d){if(!d)return'';return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function parseBR(s){if(!s)return null;const p=String(s).split('/');if(p.length!==3)return null;const y=parseInt(p[2])<100?2000+parseInt(p[2]):parseInt(p[2]);return new Date(y,parseInt(p[1])-1,parseInt(p[0]));}
 function fmtCPF(v){const d=v.replace(/\D/g,'').slice(0,11);if(d.length<=3)return d;if(d.length<=6)return d.slice(0,3)+'.'+d.slice(3);if(d.length<=9)return d.slice(0,3)+'.'+d.slice(3,6)+'.'+d.slice(6);return d.slice(0,3)+'.'+d.slice(3,6)+'.'+d.slice(6,9)+'-'+d.slice(9);}
+// Always normalize CPF to XXX.XXX.XXX-XX format for storage
+function normCPF(v){if(!v)return'';const d=String(v).replace(/\D/g,'').slice(0,11);if(d.length!==11)return d;return d.slice(0,3)+'.'+d.slice(3,6)+'.'+d.slice(6,9)+'-'+d.slice(9);}
 function autoPer(datas){if(!datas.length)return'';const mn=new Date(Math.min(...datas)),mx=new Date(Math.max(...datas));const a=MES[mn.getMonth()],b=MES[mx.getMonth()];return a===b?a+'/'+mx.getFullYear():a+'-'+b+'/'+mx.getFullYear();}
 function idSub(nome){if(!nome)return null;const u=nome.toUpperCase();for(const s of SUB)if(u.includes(s.n.toUpperCase())||nome.includes(s.d))return s.n;return null;}
 function setP(p,t){document.getElementById('pw').classList.add('v');document.getElementById('pb').style.width=p+'%';document.getElementById('ptx').textContent=t;}
@@ -44,7 +46,7 @@ const ldH=()=>ls(K.h,[]);const svH=h=>sv(K.h,h);
 // CPF
 const ldC=()=>ls(K.c,{});const svC=c=>sv(K.c,c);
 const getC=n=>ldC()[nn(n)]||'';
-function setC(n,v){if(!n)return;const c=ldC();if(v&&v.trim())c[nn(n)]=v.trim();else delete c[nn(n)];svC(c);}
+function setC(n,v){if(!n)return;const c=ldC();if(v&&v.trim()){const d=v.replace(/\D/g,'');c[nn(n)]=d.length===11?normCPF(d):v.trim();}else delete c[nn(n)];svC(c);}
 // Endereço
 const ldE=()=>ls(K.e,{});const svE=e=>sv(K.e,e);
 const getE=n=>ldE()[nn(n)]||'';
@@ -822,9 +824,11 @@ document.getElementById('btn-pdf').addEventListener('click',async()=>{
     for(const v of vendas){
       if(v.cpf&&v.tutor){
         const k=nn(v.tutor);
-        const isNew=!existCpfs[k];
-        pdfParsedCpfs[k]={cpf:v.cpf,isNew};
-        if(isNew)newCpf++;
+        const formatted=normCPF(v.cpf);
+        const existVal=existCpfs[k]||'';
+        const isNew=!existVal||normCPF(existVal)!==formatted;
+        pdfParsedCpfs[k]={cpf:formatted,isNew};
+        if(!existVal)newCpf++;
       }
       if(v.prescritor&&v.cadSipeagro){
         const k=nn(v.prescritor);
@@ -919,33 +923,53 @@ function pdfDetectColumnsFromData(rows){
 function pdfExtractDataRows(rows,colBounds){
   const subNames=['GABAPENTINA','FLUOXETINA','AMITRIPTILINA','SELEGILINA','TRAMADOL','CODEÍNA','CODEINA','RIBAVIRINA'];
   const results=[];
-  // Also handle continuation lines (where a name wraps to next line)
   let pendingRow=null;
+  // Get RT name from config for footer filtering
+  const rtName=up(ldCfg().rtNome||'PAULO EDSON FERNANDES');
+  const rtParts=rtName.split(/\s+/).filter(p=>p.length>2);// significant name parts
   
   for(const row of rows){
-    const allText=row.items.map(it=>it.str).join(' ');
-    // Skip header/footer rows
-    if(allText.includes('SUBSTÂNCIA')||allText.includes('Página')||allText.includes('Assinatura')||allText.includes('RELATÓRIO')||allText.includes('Razão Social')||allText.includes('Endereço')||allText.includes('Exercício')||allText.includes('Periodicidade')||allText.includes('CNPJ:'))continue;
-    if(allText.includes('Lista')&&allText.includes('Quantidade'))continue;
-    if(allText.includes('Prescritor')&&allText.includes('Cadastro'))continue;
-    if(allText.includes('Nota Fiscal')&&allText.includes('Data'))continue;
+    const allText=row.items.map(it=>it.str).join(' ').toUpperCase();
+    // Skip header/footer/structural rows
+    if(allText.includes('SUBSTÂNCIA')||allText.includes('PÁGINA')||allText.includes('ASSINATURA')||allText.includes('RELATÓRIO')||allText.includes('RAZÃO SOCIAL')||allText.includes('ENDEREÇO')||allText.includes('EXERCÍCIO')||allText.includes('PERIODICIDADE')||allText.includes('CNPJ:'))continue;
+    if(allText.includes('LISTA')&&allText.includes('QUANTIDADE'))continue;
+    if(allText.includes('PRESCRITOR')&&allText.includes('CADASTRO'))continue;
+    if(allText.includes('NOTA FISCAL')&&allText.includes('DATA'))continue;
+    // Skip RT signature line — check if row contains RT name
+    if(pdfRowIsRT(allText,rtName,rtParts))continue;
+    // Skip CRF line
+    if(/CRF[\s:]*\d+/.test(allText))continue;
     
-    // Check if this row starts with a known substance
     const firstWord=row.items.length>0?row.items[0].str.trim().toUpperCase():'';
     const hasSub=subNames.includes(firstWord)||(firstWord==='CODEINA');
     
     if(hasSub){
-      // If we had a pending row, finalize it
       if(pendingRow)results.push(pendingRow);
-      // Parse this row
       pendingRow=pdfParseVendaRow(row,colBounds);
     } else if(pendingRow){
-      // This might be a continuation line — append names
-      pdfMergeContinuation(pendingRow,row,colBounds);
+      // Check if this continuation row is actually a footer area
+      if(pdfRowIsRT(allText,rtName,rtParts)){
+        // Don't merge footer into data
+      } else {
+        pdfMergeContinuation(pendingRow,row,colBounds);
+      }
     }
   }
   if(pendingRow)results.push(pendingRow);
   return results;
+}
+
+// Detect if a row text is the RT signature line
+function pdfRowIsRT(text,rtName,rtParts){
+  if(!text)return false;
+  // Direct match
+  if(text.includes(rtName))return true;
+  // Check if row contains most parts of the RT name (handles slight variations)
+  if(rtParts.length>=2){
+    const matches=rtParts.filter(p=>text.includes(p));
+    if(matches.length>=rtParts.length-1&&matches.length>=2)return true;
+  }
+  return false;
 }
 
 function pdfParseVendaRow(row,cols){
@@ -1024,14 +1048,17 @@ function pdfParseVendaRow(row,cols){
 }
 
 function pdfMergeContinuation(rec,row,cols){
-  // Merge continuation line text into the pending record
+  const allText=row.items.map(it=>it.str).join(' ').toUpperCase();
+  // Skip footer-like rows entirely
+  if(allText.includes('PÁGINA')||allText.includes('ASSINATURA')||/CRF[\s:]*\d+/.test(allText))return;
+  const rtName=up(ldCfg().rtNome||'PAULO EDSON FERNANDES');
+  const rtParts=rtName.split(/\s+/).filter(p=>p.length>2);
+  if(pdfRowIsRT(allText,rtName,rtParts))return;
+  
   for(const it of row.items){
     const s=it.str.trim();if(!s)continue;
     const x=it.x;
-    // Skip structural items
-    if(s.includes('Página')||s.includes('Assinatura'))return;
     
-    // Assign based on X position
     const midPresc=cols.prescritor||0;
     if(cols.prescritor!==undefined&&x>=cols.prescritor-15&&cols.cadSipeagro!==undefined&&x<cols.cadSipeagro-15){
       rec.prescritor=(rec.prescritor?rec.prescritor+' ':'')+s;
@@ -1046,8 +1073,12 @@ function pdfMergeContinuation(rec,row,cols){
   rec.prescritor=up(rec.prescritor);
 }
 
+// Prescriber merge mapping: pdfName → existingName (or null for new)
+let pdfPrescMerge={};
+
 function renderPdfReview(){
   document.getElementById('pdf-rev-wr').style.display='block';
+  pdfPrescMerge={};// reset merge mapping
   
   // CPFs table
   const cpfEntries=Object.entries(pdfParsedCpfs).sort((a,b)=>a[0].localeCompare(b[0]));
@@ -1056,19 +1087,29 @@ function renderPdfReview(){
   let h='<thead><tr><th></th><th>Tutor</th><th>CPF</th><th>Status</th></tr></thead><tbody>';
   cpfEntries.forEach(([nome,v],i)=>{
     const cls=v.isNew?' class="rw-w"':'';
-    h+='<tr'+cls+'><td>'+(i+1)+'</td><td>'+esc(nome)+'</td><td>'+esc(fmtCPF(v.cpf))+'</td><td>'+(v.isNew?'<span style="color:var(--gn);font-weight:700">NOVO</span>':'Existente')+'</td></tr>';
+    h+='<tr'+cls+'><td>'+(i+1)+'</td><td>'+esc(nome)+'</td><td>'+esc(normCPF(v.cpf))+'</td><td>'+(v.isNew?'<span style="color:var(--gn);font-weight:700">NOVO</span>':'Existente')+'</td></tr>';
   });
   h+='</tbody>';
   document.getElementById('pdf-cpf-tbl').innerHTML=h;
   
-  // Prescritores table
+  // Prescritores table — with merge dropdown
   const prescEntries=Object.entries(pdfParsedPrescs).sort((a,b)=>a[0].localeCompare(b[0]));
   let newP=prescEntries.filter(([,v])=>v.isNew).length;
   document.getElementById('pdf-presc-cnt').textContent=prescEntries.length+' prescritores com SIPEAGRO ('+newP+' novos)';
-  h='<thead><tr><th></th><th>Prescritor</th><th>Cadastro SIPEAGRO</th><th>Status</th></tr></thead><tbody>';
+  // Build existing prescriber options
+  const existPrescs=Object.entries(ldP()).sort((a,b)=>a[0].localeCompare(b[0]));
+  h='<thead><tr><th></th><th>Nome no PDF</th><th>SIPEAGRO</th><th>Status</th><th style="min-width:180px">Vincular a (prescritor existente)</th></tr></thead><tbody>';
   prescEntries.forEach(([nome,v],i)=>{
     const cls=v.isNew?' class="rw-w"':'';
-    h+='<tr'+cls+'><td>'+(i+1)+'</td><td>'+esc(nome)+'</td><td>'+esc(v.cadSipeagro)+'</td><td>'+(v.isNew?'<span style="color:var(--gn);font-weight:700">NOVO</span>':'Existente')+'</td></tr>';
+    const eNome=nome.replace(/'/g,"\\'");
+    // Build dropdown options
+    let opts='<option value="">'+(v.isNew?'(Criar novo)':'(Manter atual)')+'</option>';
+    existPrescs.forEach(([en,ev])=>{
+      const label=en+(ev.crmv?' — CRMV-'+(ev.uf||'GO')+' '+ev.crmv:'')+(ev.cadMapa?' ['+ev.cadMapa+']':'');
+      opts+='<option value="'+esc(en)+'"'+(en===nome?' selected':'')+'>'+esc(label)+'</option>';
+    });
+    h+='<tr'+cls+'><td>'+(i+1)+'</td><td>'+esc(nome)+'</td><td>'+esc(v.cadSipeagro)+'</td><td>'+(v.isNew?'<span style="color:var(--gn);font-weight:700">NOVO</span>':'Existente')+'</td>';
+    h+='<td><select style="width:100%;background:var(--sf2);border:1px solid var(--bd);border-radius:4px;color:var(--tx);font-family:var(--sans);font-size:.68rem;padding:3px 4px" onchange="pdfPrescMerge[\''+eNome+'\']=this.value||null">'+opts+'</select></td></tr>';
   });
   h+='</tbody>';
   document.getElementById('pdf-presc-tbl').innerHTML=h;
@@ -1078,7 +1119,7 @@ function renderPdfReview(){
   h='<thead><tr><th>#</th><th>Substância</th><th>Qtd(g)</th><th>CPF</th><th>Tutor</th><th>Prescritor</th><th>SIPEAGRO</th><th>OM</th><th>Doc</th><th>Data</th></tr></thead><tbody>';
   pdfParsedVendas.forEach((v,i)=>{
     const warn=!v.cpf||!v.prescritor?'rw-w':'';
-    h+='<tr class="'+warn+'"><td>'+(i+1)+'</td><td>'+esc(v.substancia)+'</td><td>'+(v.qtd?v.qtd.toFixed(4):'')+'</td><td>'+esc(fmtCPF(v.cpf))+'</td><td>'+esc(v.tutor)+'</td><td>'+esc(v.prescritor)+'</td><td>'+esc(v.cadSipeagro)+'</td><td>'+esc(v.nrOm)+'</td><td>'+esc(v.nrDoc)+'</td><td>'+esc(v.data)+'</td></tr>';
+    h+='<tr class="'+warn+'"><td>'+(i+1)+'</td><td>'+esc(v.substancia)+'</td><td>'+(v.qtd?v.qtd.toFixed(4):'')+'</td><td>'+esc(normCPF(v.cpf))+'</td><td>'+esc(v.tutor)+'</td><td>'+esc(v.prescritor)+'</td><td>'+esc(v.cadSipeagro)+'</td><td>'+esc(v.nrOm)+'</td><td>'+esc(v.nrDoc)+'</td><td>'+esc(v.data)+'</td></tr>';
   });
   h+='</tbody>';
   document.getElementById('pdf-vendas-tbl').innerHTML=h;
@@ -1093,30 +1134,36 @@ function importPdfData(){
   const cpfs=ldC();
   for(const[nome,v]of Object.entries(pdfParsedCpfs)){
     if(v.cpf){
-      if(!cpfs[nome]){addedCpf++;}else if(cpfs[nome]!==v.cpf){updCpf++;}
-      cpfs[nome]=v.cpf;
+      const formatted=normCPF(v.cpf);
+      if(!cpfs[nome]){addedCpf++;}else if(cpfs[nome]!==formatted){updCpf++;}
+      cpfs[nome]=formatted;
     }
   }
   svC(cpfs);
   
-  let addedPresc=0,updPresc=0;
+  let addedPresc=0,updPresc=0,mergedPresc=0;
   const prescs=ldP();
   for(const[nome,v]of Object.entries(pdfParsedPrescs)){
     if(v.cadSipeagro){
-      if(!prescs[nome]){
-        prescs[nome]={crmv:'',uf:'GO',cadMapa:v.cadSipeagro};
+      // Check if user selected a merge target
+      const mergeTarget=pdfPrescMerge[nome];
+      const targetName=mergeTarget||nome;// use merge target if set, otherwise original name
+      
+      if(!prescs[targetName]){
+        prescs[targetName]={crmv:'',uf:'GO',cadMapa:v.cadSipeagro};
         addedPresc++;
-      } else if(!prescs[nome].cadMapa||prescs[nome].cadMapa!==v.cadSipeagro){
-        if(!prescs[nome].cadMapa)addedPresc++;else updPresc++;
-        prescs[nome].cadMapa=v.cadSipeagro;
+      } else if(!prescs[targetName].cadMapa||prescs[targetName].cadMapa!==v.cadSipeagro){
+        if(!prescs[targetName].cadMapa)addedPresc++;else updPresc++;
+        prescs[targetName].cadMapa=v.cadSipeagro;
       }
+      if(mergeTarget&&mergeTarget!==nome)mergedPresc++;
     }
   }
   svP(prescs);
   
   pdfLog('✓ CPFs importados: '+addedCpf+' novos, '+updCpf+' atualizados','ok');
-  pdfLog('✓ Prescritores SIPEAGRO: '+addedPresc+' novos, '+updPresc+' atualizados','ok');
-  alert('Cadastros atualizados!\n'+addedCpf+' CPFs novos\n'+addedPresc+' cadastros SIPEAGRO novos');
+  pdfLog('✓ Prescritores SIPEAGRO: '+addedPresc+' novos, '+updPresc+' atualizados'+(mergedPresc?' ('+mergedPresc+' vinculados)':''),'ok');
+  alert('Cadastros atualizados!\n'+addedCpf+' CPFs novos\n'+addedPresc+' cadastros SIPEAGRO novos'+(mergedPresc?'\n'+mergedPresc+' prescritores vinculados':''));
 }
 
 function enrichMovFromPdf(){
@@ -1138,7 +1185,8 @@ function enrichMovFromPdf(){
       const v=vendaByOM[om];if(!v)continue;
       
       // Enrich CPF
-      if(!l.cpf&&v.cpf){l.cpf=v.cpf;enriched++;}
+      if(!l.cpf&&v.cpf){l.cpf=normCPF(v.cpf);enriched++;}
+      else if(l.cpf&&l.cpf.replace(/\D/g,'').length===11){l.cpf=normCPF(l.cpf);}// normalize existing
       // Enrich Cadastro MAPA
       if(!l.cadMapa&&v.cadSipeagro){l.cadMapa=v.cadSipeagro;enriched++;}
       // Enrich tutor if empty
@@ -1187,4 +1235,11 @@ chkBkp();setTimeout(function(){renderMov();},100);
     }
   }
   if(added>0){svP(prescs);console.log('Extraídos '+added+' prescritores dos movimentos existentes.');}
+  // Normalizar CPFs existentes para formato XXX.XXX.XXX-XX
+  const cpfCad=ldC();let cpfNorm=0;
+  for(const k of Object.keys(cpfCad)){
+    const raw=cpfCad[k];const d=raw.replace(/\D/g,'');
+    if(d.length===11){const f=normCPF(d);if(f!==raw){cpfCad[k]=f;cpfNorm++;}}
+  }
+  if(cpfNorm>0){svC(cpfCad);console.log('Normalizados '+cpfNorm+' CPFs para XXX.XXX.XXX-XX.');}
 })();
