@@ -6,12 +6,15 @@
  */
 
 // ═══ CONSTANTES ═══
-const SUB=[
+const SUB_DEFAULT=[
   {n:'Gabapentina',l:'C1',d:'04369'},{n:'Fluoxetina',l:'C1',d:'03094'},
   {n:'Amitriptilina',l:'C1',d:'00423'},{n:'Selegilina',l:'C1',d:'07929'},
   {n:'Tramadol',l:'A2',d:'08806'},{n:'Codeína',l:'A2',d:'01706'},
   {n:'Ribavirina',l:'C1',d:'07168'},
 ];
+function ldSubs(){const saved=ls('controlados_substancias',null);return saved||SUB_DEFAULT.slice();}
+function svSubs(s){sv('controlados_substancias',s);}
+let SUB=ldSubs();
 const MES=['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
 const K={h:'controlados_fa_v2',c:'controlados_cpfs',e:'controlados_enderecos',
   p:'controlados_prescritores',m:'controlados_movimentos',b:'controlados_ultimo_backup',cfg:'controlados_config'};
@@ -32,7 +35,7 @@ function fmtCPF(v){const d=v.replace(/\D/g,'').slice(0,11);if(d.length<=3)return
 // Always normalize CPF to XXX.XXX.XXX-XX format for storage
 function normCPF(v){if(!v)return'';const d=String(v).replace(/\D/g,'').slice(0,11);if(d.length!==11)return d;return d.slice(0,3)+'.'+d.slice(3,6)+'.'+d.slice(6,9)+'-'+d.slice(9);}
 function autoPer(datas){if(!datas.length)return'';const mn=new Date(Math.min(...datas)),mx=new Date(Math.max(...datas));const a=MES[mn.getMonth()],b=MES[mx.getMonth()];return a===b?a+'/'+mx.getFullYear():a+'-'+b+'/'+mx.getFullYear();}
-function idSub(nome){if(!nome)return null;const u=nome.toUpperCase();for(const s of SUB)if(u.includes(s.n.toUpperCase())||nome.includes(s.d))return s.n;return null;}
+function idSub(nome){if(!nome)return null;const u=nome.toUpperCase();for(const s of ldSubs())if(u.includes(s.n.toUpperCase())||nome.includes(s.d))return s.n;return null;}
 function setP(p,t){document.getElementById('pw').classList.add('v');document.getElementById('pb').style.width=p+'%';document.getElementById('ptx').textContent=t;}
 function lg(m,t){const b=document.getElementById('lb');b.classList.add('v');const l=document.createElement('div');if(t)l.className='l'+t[0];l.textContent=m;b.appendChild(l);b.scrollTop=b.scrollHeight;}
 function chkRdy(){document.getElementById('btn-proc').disabled=!(rawMov&&rawCE);}
@@ -114,12 +117,25 @@ function extrMov(raw){
   for(let r=0;r<raw.length;r++){
     const row=raw[r];
     if(String(row[6]||'').includes('Produto:')){sub=c(row,8);lista=c(row,3);continue;}
-    if(c(row,4)==='O.M.'){
+    const tipo=c(row,4);
+    if(tipo==='O.M.'){
       let dt=parseBR(c(row,0));let qtdG=null;
       try{qtdG=parseFloat(String(row[17]).replace(',','.'));}catch(e){}
-      const crmvRaw=c(row,20),crmvNr=crmvRaw.replace(/CRMV\s+\w+:\s*/i,'').trim();
-      recs.push({substancia:sub,lista,data:dt,dataStr:c(row,0),tutor:c(row,7),
+      const crmvRaw=c(row,20),crmvNr=crmvRaw.replace(/CRMV?\s+\w+:\s*/i,'').replace(/CRM\s+\w+:\s*/i,'').trim();
+      recs.push({tipo:'saida',substancia:sub,lista,data:dt,dataStr:c(row,0),tutor:c(row,7),
         nrOm:ln(row[11]),nrDoc:ln(row[12]),calculo:c(row,15),qtdG,crmvRaw,crmvNr,nrReceita:ln(row[25])});
+    } else if(tipo==='N.E.'){
+      // Nota de Entrada (aquisição)
+      let dt=parseBR(c(row,0));let qtdG=null;
+      try{qtdG=parseFloat(String(row[17]).replace(',','.'));}catch(e){}
+      recs.push({tipo:'entrada',substancia:sub,lista,data:dt,dataStr:c(row,0),
+        fornecedor:c(row,7),nfNumero:ln(row[12]),qtdG});
+    } else if(tipo==='A.E.'){
+      // Ajuste de Estoque (perda/vencimento)
+      let dt=parseBR(c(row,0));let qtdG=null;
+      try{qtdG=parseFloat(String(row[17]).replace(',','.'));}catch(e){}
+      recs.push({tipo:'perda',substancia:sub,lista,data:dt,dataStr:c(row,0),
+        descricao:c(row,7),nrDoc:ln(row[12]),qtdG});
     }
   }
   return recs;
@@ -152,6 +168,17 @@ function extrCE(raw){
 // ═══ CRUZAMENTO ═══
 function cruzar(movs,ced){
   return movs.map(m=>{
+    if(m.tipo==='entrada'){
+      return{...m,substancia:up(m.substancia),lista:up(m.lista),_sel:false,_issues:[],
+        status:'ATIVA',clienteFull:'',cpf:'',endereco:'',prescritor:'',crmvNr:'',crmvUf:'',cadMapa:'',
+        calculo:'',qtdeTexto:'',doseMg:'',nrOm:'',nrReceita:''};
+    }
+    if(m.tipo==='perda'){
+      return{...m,substancia:up(m.substancia),lista:up(m.lista),_sel:false,_issues:[],
+        status:'ATIVA',clienteFull:'',cpf:'',endereco:'',prescritor:'',crmvNr:'',crmvUf:'',cadMapa:'',
+        calculo:'',qtdeTexto:'',doseMg:'',nrOm:'',nrReceita:''};
+    }
+    // Saída — merge with CLIENTE_END
     const ce=ced[m.nrOm]||{};
     const tutor=up(ce.cliente||m.tutor);
     const prescritor=up(ce.prescritor||'');
@@ -173,7 +200,9 @@ function cruzar(movs,ced){
 function validar(dados){
   let tot=0;const oms={};
   dados.forEach(d=>{
-    d._issues=[];if(d.status!=='ATIVA')return;
+    d._issues=[];
+    if(d.tipo==='entrada'||d.tipo==='perda')return;// skip validation for entries/losses
+    if(d.status!=='ATIVA')return;
     if(!d.cpf)d._issues.push('CPF');
     if(!d.endereco)d._issues.push('End');
     if(!d.prescritor)d._issues.push('Presc');
@@ -196,7 +225,11 @@ document.getElementById('btn-proc').addEventListener('click',async()=>{
   await new Promise(r=>setTimeout(r,50));
   try{
     setP(10,'Lendo MOVIMENTO...');
-    const movs=extrMov(rawMov);lg('Movimento: '+movs.length+' dispensações','ok');
+    const movs=extrMov(rawMov);
+    const saidas=movs.filter(m=>m.tipo==='saida');
+    const entradas=movs.filter(m=>m.tipo==='entrada');
+    const perdas=movs.filter(m=>m.tipo==='perda');
+    lg('Movimento: '+saidas.length+' dispensações, '+entradas.length+' entradas (N.E.), '+perdas.length+' perdas (A.E.)','ok');
     setP(40,'Lendo CLIENTE_END...');
     const ced=extrCE(rawCE);lg('Receituário: '+Object.keys(ced).length+' registros','ok');
     setP(60,'Cruzando...');
@@ -226,31 +259,39 @@ function renderRev(){
   const tbl=document.getElementById('rev-tbl');
   const ft=document.getElementById('flt-txt').value.toUpperCase();
   const fs=document.getElementById('flt-sub').value;
-  // CPF alert
-  const semCPF=dadosRev.filter(d=>d.status==='ATIVA'&&!d.cpf);
+  // CPF alert (only for saídas)
+  const semCPF=dadosRev.filter(d=>d.tipo==='saida'&&d.status==='ATIVA'&&!d.cpf);
   const alC=document.getElementById('al-cpf');
   if(semCPF.length>0){alC.innerHTML='⚠ '+[...new Set(semCPF.map(d=>d.clienteFull))].length+' tutor(es) sem CPF.';alC.style.display='block';}else alC.style.display='none';
 
-  let h='<thead><tr><th style="width:28px"><input type="checkbox" onchange="selAll(this.checked)"/></th><th>#</th><th>Substância</th><th>Data</th><th>OM</th><th>Doc</th><th style="min-width:120px">Tutor</th><th style="min-width:100px">CPF</th><th style="min-width:140px">Endereço</th><th style="min-width:110px">Prescritor</th><th>CRMV</th><th>UF</th><th>Cad.MAPA</th><th style="min-width:90px">Concentração</th><th>Qtd(g)</th><th>Receita</th><th>St</th><th></th></tr></thead><tbody>';
+  let h='<thead><tr><th style="width:28px"><input type="checkbox" onchange="selAll(this.checked)"/></th><th>#</th><th>Tipo</th><th>Substância</th><th>Data</th><th>OM</th><th>Doc</th><th style="min-width:120px">Tutor / Descrição</th><th style="min-width:100px">CPF</th><th style="min-width:140px">Endereço</th><th style="min-width:110px">Prescritor</th><th>CRMV</th><th>UF</th><th>Cad.MAPA</th><th style="min-width:90px">Concentração</th><th>Qtd(g)</th><th>Receita</th><th>St</th><th></th></tr></thead><tbody>';
   let vis=0;
   dadosRev.forEach((d,i)=>{
     if(fs&&d.substancia!==fs)return;
-    if(ft&&!d.clienteFull.includes(ft)&&!d.prescritor.includes(ft)&&!d.nrOm.includes(ft)&&!d.substancia.includes(ft))return;
+    const searchText=(d.clienteFull||'')+(d.prescritor||'')+(d.nrOm||'')+(d.substancia||'')+(d.fornecedor||'')+(d.descricao||'');
+    if(ft&&!searchText.toUpperCase().includes(ft))return;
     vis++;
     const warn=d._issues&&d._issues.length&&d.status==='ATIVA';
-    const cls=d.status==='CANCELADA'?' class="rw-c"':(warn?' class="rw-w"':'');
+    const cls=d.status==='CANCELADA'?' class="rw-c"':(d.tipo==='entrada'?' style="background:rgba(74,154,126,.06)"':(d.tipo==='perda'?' style="background:rgba(196,64,64,.06)"':(warn?' class="rw-w"':'')));
     const chk=d._sel?' checked':'';
-    h+='<tr'+cls+'><td><input type="checkbox" data-i="'+i+'"'+chk+' onchange="tglSel(this)"/></td><td>'+(i+1)+'</td><td>'+d.substancia+'</td><td>'+(d.data?fmtD(d.data):d.dataStr)+'</td><td>'+d.nrOm+'</td><td>'+d.nrDoc+'</td>';
-    h+='<td><input value="'+esc(d.clienteFull)+'" data-i="'+i+'" data-f="clienteFull" onchange="rEd(this)"/></td>';
-    h+='<td><input value="'+esc(d.cpf)+'" data-i="'+i+'" data-f="cpf" oninput="this.value=fmtCPF(this.value)" onchange="rEdCPF(this)" placeholder="000.000.000-00"/></td>';
-    h+='<td><input value="'+esc(d.endereco)+'" data-i="'+i+'" data-f="endereco" onchange="rEdEnd(this)"/></td>';
-    h+='<td><input value="'+esc(d.prescritor)+'" data-i="'+i+'" data-f="prescritor" onchange="rEdPresc(this)"/></td>';
-    h+='<td><input value="'+esc(d.crmvNr)+'" data-i="'+i+'" data-f="crmvNr" onchange="rEdCRMV(this)" style="width:60px"/></td>';
-    h+='<td><input value="'+esc(d.crmvUf)+'" data-i="'+i+'" data-f="crmvUf" onchange="rEd(this)" style="width:35px" maxlength="2"/></td>';
-    h+='<td><input value="'+esc(d.cadMapa||'')+'" data-i="'+i+'" data-f="cadMapa" onchange="rEdCadMapa(this)" style="width:70px" placeholder="MAPA"/></td>';
-    h+='<td><input value="'+esc(d.calculo)+'" data-i="'+i+'" data-f="calculo" onchange="rEd(this)"/></td>';
+    const tipoTag=d.tipo==='entrada'?'<span class="mtag me">Ent</span>':d.tipo==='perda'?'<span class="mtag mp">Per</span>':'<span class="mtag ms">Saída</span>';
+    h+='<tr'+cls+'><td><input type="checkbox" data-i="'+i+'"'+chk+' onchange="tglSel(this)"/></td><td>'+(i+1)+'</td><td>'+tipoTag+'</td><td>'+d.substancia+'</td><td>'+(d.data?fmtD(d.data):d.dataStr||'')+'</td><td>'+(d.nrOm||'')+'</td><td>'+(d.nrDoc||d.nfNumero||'')+'</td>';
+    if(d.tipo==='entrada'){
+      h+='<td colspan="8"><input value="'+esc(d.fornecedor||'')+'" data-i="'+i+'" data-f="fornecedor" onchange="rEd(this)" placeholder="Fornecedor" style="width:100%"/></td>';
+    } else if(d.tipo==='perda'){
+      h+='<td colspan="8"><input value="'+esc(d.descricao||'')+'" data-i="'+i+'" data-f="descricao" onchange="rEd(this)" placeholder="Motivo da perda" style="width:100%"/></td>';
+    } else {
+      h+='<td><input value="'+esc(d.clienteFull)+'" data-i="'+i+'" data-f="clienteFull" onchange="rEd(this)"/></td>';
+      h+='<td><input value="'+esc(d.cpf)+'" data-i="'+i+'" data-f="cpf" oninput="this.value=fmtCPF(this.value)" onchange="rEdCPF(this)" placeholder="000.000.000-00"/></td>';
+      h+='<td><input value="'+esc(d.endereco)+'" data-i="'+i+'" data-f="endereco" onchange="rEdEnd(this)"/></td>';
+      h+='<td><input value="'+esc(d.prescritor)+'" data-i="'+i+'" data-f="prescritor" onchange="rEdPresc(this)"/></td>';
+      h+='<td><input value="'+esc(d.crmvNr)+'" data-i="'+i+'" data-f="crmvNr" onchange="rEdCRMV(this)" style="width:60px"/></td>';
+      h+='<td><input value="'+esc(d.crmvUf)+'" data-i="'+i+'" data-f="crmvUf" onchange="rEd(this)" style="width:35px" maxlength="2"/></td>';
+      h+='<td><input value="'+esc(d.cadMapa||'')+'" data-i="'+i+'" data-f="cadMapa" onchange="rEdCadMapa(this)" style="width:70px" placeholder="MAPA"/></td>';
+      h+='<td><input value="'+esc(d.calculo)+'" data-i="'+i+'" data-f="calculo" onchange="rEd(this)"/></td>';
+    }
     h+='<td><input type="number" value="'+(d.qtdG||'')+'" data-i="'+i+'" data-f="qtdG" onchange="rEd(this)" step="0.0001" style="width:65px"/></td>';
-    h+='<td><input value="'+esc(d.nrReceita)+'" data-i="'+i+'" data-f="nrReceita" onchange="rEd(this)" style="width:70px"/></td>';
+    h+='<td>'+(d.tipo==='saida'?'<input value="'+esc(d.nrReceita||'')+'" data-i="'+i+'" data-f="nrReceita" onchange="rEd(this)" style="width:70px"/>':'')+'</td>';
     h+='<td><select data-i="'+i+'" data-f="status" onchange="rEd(this)"><option value="ATIVA"'+(d.status==='ATIVA'?' selected':'')+'>A</option><option value="CANCELADA"'+(d.status==='CANCELADA'?' selected':'')+'>C</option></select></td>';
     h+='<td>'+(warn?'<div class="ri">⚠ '+d._issues.join(',')+'</div>':'')+'</td></tr>';
   });
@@ -259,7 +300,7 @@ function renderRev(){
   document.getElementById('rev-cnt').textContent=vis+' visíveis · '+dadosRev.filter(d=>d.status==='ATIVA').length+' ativos';
 }
 
-function rEd(el){const i=+el.dataset.i,f=el.dataset.f;if(f==='qtdG')dadosRev[i][f]=parseFloat(el.value)||0;else dadosRev[i][f]=up(el.value);}
+function rEd(el){const i=+el.dataset.i,f=el.dataset.f;if(f==='qtdG')dadosRev[i][f]=parseFloat(el.value)||0;else dadosRev[i][f]=el.value?up(el.value):el.value;}
 function rEdCPF(el){const i=+el.dataset.i,v=el.value;dadosRev[i].cpf=v;setC(dadosRev[i].clienteFull,v);const k=nn(dadosRev[i].clienteFull);dadosRev.forEach((d,j)=>{if(j!==i&&nn(d.clienteFull)===k)d.cpf=v;});renderRev();}
 function rEdEnd(el){const i=+el.dataset.i,v=up(el.value);dadosRev[i].endereco=v;setE(dadosRev[i].clienteFull,v);const k=nn(dadosRev[i].clienteFull);dadosRev.forEach((d,j)=>{if(j!==i&&nn(d.clienteFull)===k)d.endereco=v;});}
 function rEdPresc(el){const i=+el.dataset.i,v=up(el.value);dadosRev[i].prescritor=v;const c=getP(v);if(c.crmv){dadosRev[i].crmvNr=c.crmv;dadosRev[i].crmvUf=c.uf||'GO';renderRev();}}
@@ -276,29 +317,44 @@ document.getElementById('btn-confirm').addEventListener('click',async()=>{
   btn.disabled=true;btn.innerHTML='<div class="spinner"></div> Salvando...';
   await new Promise(r=>setTimeout(r,50));
   try{
-    // Salvar cadastros
+    // Salvar cadastros (only for saídas)
     dadosRev.forEach(d=>{
-      if(d.status==='ATIVA'){
+      if(d.status==='ATIVA'&&d.tipo==='saida'){
         if(d.cpf)setC(d.clienteFull,d.cpf);
         if(d.endereco)setE(d.clienteFull,d.endereco);
         if(d.prescritor&&d.crmvNr)setP2(d.prescritor,d.crmvNr,d.crmvUf,d.cadMapa);
       }
     });
-    // Inserir saídas nos movimentos (deduplicar por nrOm+substância)
+    // Inserir movimentos (saídas, entradas N.E., perdas A.E.)
     const all=ldM();
+    let cntSaida=0,cntEntrada=0,cntPerda=0;
     for(const d of dadosRev){
       if(d.status!=='ATIVA')continue;
       const sn=idSub(d.substancia);if(!sn)continue;
       if(!all[sn])all[sn]={estoqueInicial:saldoFinal(sn),lancamentos:[]};
-      const ex=all[sn].lancamentos.find(l=>l.nrOm===d.nrOm&&l.tipo==='saida');
-      const rec={
-        tutor:d.clienteFull,cpf:d.cpf,endereco:d.endereco,
-        prescritor:d.prescritor,crmvNr:d.crmvNr,crmvUf:d.crmvUf,cadMapa:d.cadMapa||'',
-        calculo:d.calculo,doseMg:d.doseMg,nrReceita:d.nrReceita,
-        substancia:d.substancia,lista:d.lista,
-      };
-      if(ex){ex.qtd=d.qtdG||0;ex.data=d.data?fmtDiso(d.data):'';ex.descricao='OM '+d.nrOm+' / DOC '+d.nrDoc;Object.assign(ex,rec);}
-      else{all[sn].lancamentos.push({id:'imp_'+uid(),tipo:'saida',data:d.data?fmtDiso(d.data):'',qtd:d.qtdG||0,descricao:'OM '+d.nrOm+' / DOC '+d.nrDoc,nrOm:d.nrOm,nrDoc:d.nrDoc,origem:'importado',...rec});}
+      
+      if(d.tipo==='saida'){
+        const ex=all[sn].lancamentos.find(l=>l.nrOm===d.nrOm&&l.tipo==='saida');
+        const rec={tutor:d.clienteFull,cpf:d.cpf,endereco:d.endereco,
+          prescritor:d.prescritor,crmvNr:d.crmvNr,crmvUf:d.crmvUf,cadMapa:d.cadMapa||'',
+          calculo:d.calculo,doseMg:d.doseMg,nrReceita:d.nrReceita,substancia:d.substancia,lista:d.lista};
+        if(ex){ex.qtd=d.qtdG||0;ex.data=d.data?fmtDiso(d.data):'';ex.descricao='OM '+d.nrOm+' / DOC '+d.nrDoc;Object.assign(ex,rec);}
+        else{all[sn].lancamentos.push({id:'imp_'+uid(),tipo:'saida',data:d.data?fmtDiso(d.data):'',qtd:d.qtdG||0,descricao:'OM '+d.nrOm+' / DOC '+d.nrDoc,nrOm:d.nrOm,nrDoc:d.nrDoc,origem:'importado',...rec});}
+        cntSaida++;
+      } else if(d.tipo==='entrada'){
+        // Deduplicate by NF number + substance
+        const exNF=all[sn].lancamentos.find(l=>l.tipo==='entrada'&&l.nfNumero===d.nfNumero&&d.nfNumero);
+        if(!exNF){
+          all[sn].lancamentos.push({id:'imp_'+uid(),tipo:'entrada',data:d.data?fmtDiso(d.data):'',qtd:d.qtdG||0,
+            descricao:up(d.fornecedor||''),fornecedor:up(d.fornecedor||''),nfNumero:d.nfNumero||'',cnpjFornecedor:'',nrPartida:'',
+            origem:'importado'});
+          cntEntrada++;
+        }
+      } else if(d.tipo==='perda'){
+        all[sn].lancamentos.push({id:'imp_'+uid(),tipo:'perda',data:d.data?fmtDiso(d.data):'',qtd:d.qtdG||0,
+          descricao:up(d.descricao||''),nrDoc:d.nrDoc||'',origem:'importado'});
+        cntPerda++;
+      }
     }
     svM(all);
     for(const n of Object.keys(all))recalc(n);
@@ -316,11 +372,11 @@ document.getElementById('btn-confirm').addEventListener('click',async()=>{
       substanciasAtivas:[...new Set(dadosRev.filter(d=>d.status==='ATIVA').map(d=>d.substancia))],
       estoquesInicial:estIni,estoquesFinal:estFinal});
     svH(hist);
-    lg('✓ '+dadosRev.filter(d=>d.status==='ATIVA').length+' dispensações importadas para Movimentos!','ok');
+    lg('✓ '+cntSaida+' dispensações, '+cntEntrada+' entradas, '+cntPerda+' perdas importadas para Movimentos!','ok');
     dadosRev=[];
     document.getElementById('rev-wr').classList.remove('v');
     // Ir para aba Movimentos
-    swTab('mov',document.querySelectorAll('.tab')[1]);
+    swTab('mov',document.querySelectorAll('.tab')[0]);
   }catch(err){lg('ERRO: '+err.message,'err');console.error(err);}
   finally{btn.disabled=false;btn.textContent='✓ Confirmar Importação → Movimentos';}
 });
@@ -328,6 +384,17 @@ document.getElementById('btn-confirm').addEventListener('click',async()=>{
 // ═══ MODAIS CPF / PRESCRITOR ═══
 function openModal(tipo){
   if(tipo==="config"){openConfigModal();return;}
+  if(tipo==='subsModal'){
+    SUB=ldSubs();
+    const el=document.getElementById('subs-list');
+    let h='<table style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size:.7rem"><tr><th style="text-align:left;padding:4px;border-bottom:1px solid var(--bd);color:var(--ac);font-size:.6rem">SUBSTÂNCIA</th><th style="padding:4px;border-bottom:1px solid var(--bd);color:var(--ac);font-size:.6rem">LISTA</th><th style="padding:4px;border-bottom:1px solid var(--bd);color:var(--ac);font-size:.6rem">DCB</th><th></th></tr>';
+    SUB.forEach(s=>{
+      const isDef=SUB_DEFAULT.find(d=>d.n===s.n);
+      h+='<tr><td style="padding:3px 5px;border-bottom:1px solid var(--bd)">'+esc(s.n)+'</td><td style="padding:3px 5px;border-bottom:1px solid var(--bd)">'+esc(s.l)+'</td><td style="padding:3px 5px;border-bottom:1px solid var(--bd)">'+esc(s.d)+'</td><td>'+(isDef?'':'<button class="bd" style="font-size:.58rem;padding:2px 5px" onclick="rmSub(\''+s.n.replace(/'/g,"\\'")+'\')">✕</button>')+'</td></tr>';
+    });
+    h+='</table>';el.innerHTML=h;
+    document.getElementById('mo-subs').classList.add('a');return;
+  }
   if(tipo==='cpf'){
     const entries=Object.entries(ldC()).sort((a,b)=>a[0].localeCompare(b[0]));
     const el=document.getElementById('cpf-list');
@@ -346,7 +413,7 @@ function openModal(tipo){
     document.getElementById('mo-presc').classList.add('a');
   }
 }
-function closeModal(t){var id=t==='cpf'?'mo-cpf':t==='presc'?'mo-presc':'mo-config';document.getElementById(id).classList.remove('a');}
+function closeModal(t){var id=t==='cpf'?'mo-cpf':t==='presc'?'mo-presc':t==='subsModal'?'mo-subs':'mo-config';document.getElementById(id).classList.remove('a');}
 function updPresc(nome,el){const p=ldP();const cur=p[nome]||{};cur[el.dataset.f]=el.value.trim();p[nome]=cur;svP(p);}
 function addPrescManual(){
   const nome=up(document.getElementById('add-p-nome').value);
@@ -364,12 +431,14 @@ function clearCad(t){if(!confirm('Limpar todos?'))return;if(t==='cpf'){svC({});o
 document.getElementById('mo-cpf').addEventListener('click',function(e){if(e.target===this)closeModal('cpf');});
 document.getElementById('mo-presc').addEventListener('click',function(e){if(e.target===this)closeModal('presc');});
 document.getElementById('mo-config').addEventListener('click',function(e){if(e.target===this)closeModal('config');});
+document.getElementById('mo-subs').addEventListener('click',function(e){if(e.target===this)closeModal('subsModal');});
 
 // ═══ ABA MOVIMENTOS ═══
 let mvSel={};// {lancId:true}
 function renderMov(){
   const sel=document.getElementById('mv-sub');
   const cur=sel.value;
+  SUB=ldSubs();// refresh
   sel.innerHTML=SUB.map(s=>'<option value="'+s.n+'"'+(s.n===cur?' selected':'')+'>'+s.n+' ('+s.l+')</option>').join('');
   renderMovList();
 }
@@ -377,6 +446,8 @@ function renderMovList(){
   const nm=document.getElementById('mv-sub').value;
   recalc(nm);
   const s=getSM(nm);
+  // Populate estoque inicial input
+  document.getElementById('mv-ei').value=s.estoqueInicial||0;
   const te=s.lancamentos.filter(l=>l.tipo==='entrada').reduce((a,l)=>a+l.qtd,0);
   const ts=s.lancamentos.filter(l=>l.tipo==='saida').reduce((a,l)=>a+l.qtd,0);
   const tp=s.lancamentos.filter(l=>l.tipo==='perda').reduce((a,l)=>a+l.qtd,0);
@@ -430,6 +501,34 @@ function addMov(){
   renderMovList();
 }
 function rmMov(n,id){if(!confirm('Remover?'))return;rmLanc(n,id);delete mvSel[id];renderMovList();}
+
+// ═══ ESTOQUE INICIAL ═══
+function editEI(){
+  const nm=document.getElementById('mv-sub').value;
+  const v=parseFloat(document.getElementById('mv-ei').value)||0;
+  setEI(nm,v);renderMovList();
+}
+
+// ═══ SUBSTÂNCIAS DINÂMICAS ═══
+function addSubManual(){
+  const nome=document.getElementById('add-s-nome').value.trim();
+  const lista=document.getElementById('add-s-lista').value;
+  const dcb=document.getElementById('add-s-dcb').value.trim();
+  if(!nome){alert('Informe o nome da substância.');return;}
+  SUB=ldSubs();
+  if(SUB.find(s=>s.n.toUpperCase()===nome.toUpperCase())){alert('Substância já existe.');return;}
+  // Capitalize first letter
+  const nCap=nome.charAt(0).toUpperCase()+nome.slice(1).toLowerCase();
+  SUB.push({n:nCap,l:lista,d:dcb||'00000'});
+  svSubs(SUB);
+  document.getElementById('add-s-nome').value='';document.getElementById('add-s-dcb').value='';
+  openModal('subsModal');
+  renderMov();
+}
+function rmSub(nome){
+  if(!confirm('Remover substância "'+nome+'"? Os dados de movimentos serão mantidos.'))return;
+  SUB=ldSubs().filter(s=>s.n!==nome);svSubs(SUB);openModal('subsModal');renderMov();
+}
 
 // ═══ IMPRESSÃO — CORPO (LIVRO DE REGISTRO) ═══
 function printCorpo(){
@@ -656,7 +755,7 @@ function renderHist(){
     el.appendChild(div);
   });
 }
-function useAsEI(id){const reg=ldH().find(r=>r.id===id);if(!reg||!reg.estoquesFinal)return;SUB.forEach(s=>{if(reg.estoquesFinal[s.n]!==undefined)setEI(s.n,reg.estoquesFinal[s.n]);});swTab('mov',document.querySelectorAll('.tab')[1]);alert('Estoques iniciais atualizados.');}
+function useAsEI(id){const reg=ldH().find(r=>r.id===id);if(!reg||!reg.estoquesFinal)return;SUB.forEach(s=>{if(reg.estoquesFinal[s.n]!==undefined)setEI(s.n,reg.estoquesFinal[s.n]);});swTab('mov',document.querySelectorAll('.tab')[0]);alert('Estoques iniciais atualizados.');}
 function delHist(id){if(!confirm('Excluir?'))return;svH(ldH().filter(r=>r.id!==id));renderHist();}
 
 // ═══ BACKUP ═══
