@@ -5,6 +5,10 @@
  * v5.0: Parser de PDF MAPA (CPFs + Cadastro SIPEAGRO)
  */
 
+// ═══ STORAGE HELPERS (must be first — used by CONSTANTES) ═══
+const ls=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))||d;}catch(e){return d;}};
+const sv=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
+
 // ═══ CONSTANTES ═══
 const SUB_DEFAULT=[
   {n:'Gabapentina',l:'C1',d:'04369'},{n:'Fluoxetina',l:'C1',d:'03094'},
@@ -39,10 +43,6 @@ function idSub(nome){if(!nome)return null;const u=nome.toUpperCase();for(const s
 function setP(p,t){document.getElementById('pw').classList.add('v');document.getElementById('pb').style.width=p+'%';document.getElementById('ptx').textContent=t;}
 function lg(m,t){const b=document.getElementById('lb');b.classList.add('v');const l=document.createElement('div');if(t)l.className='l'+t[0];l.textContent=m;b.appendChild(l);b.scrollTop=b.scrollHeight;}
 function chkRdy(){document.getElementById('btn-proc').disabled=!(rawMov&&rawCE);}
-
-// ═══ LOCALSTORAGE ═══
-const ls=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))||d;}catch(e){return d;}};
-const sv=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
 
 // Histórico
 const ldH=()=>ls(K.h,[]);const svH=h=>sv(K.h,h);
