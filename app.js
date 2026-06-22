@@ -448,7 +448,7 @@ function openModal(tipo){
     document.getElementById('mo-presc').classList.add('a');
   }
 }
-function closeModal(t){var id=t==='cpf'?'mo-cpf':t==='presc'?'mo-presc':t==='subsModal'?'mo-subs':'mo-config';document.getElementById(id).classList.remove('a');}
+function closeModal(t){var id=t==='cpf'?'mo-cpf':t==='presc'?'mo-presc':t==='subsModal'?'mo-subs':t==='editLanc'?'mo-edit':'mo-config';document.getElementById(id).classList.remove('a');}
 function updPresc(nome,el){const p=ldP();const cur=p[nome]||{};cur[el.dataset.f]=el.value.trim();p[nome]=cur;svP(p);}
 function addPrescManual(){
   const nome=up(document.getElementById('add-p-nome').value);
@@ -467,6 +467,7 @@ document.getElementById('mo-cpf')?.addEventListener('click',function(e){if(e.tar
 document.getElementById('mo-presc')?.addEventListener('click',function(e){if(e.target===this)closeModal('presc');});
 document.getElementById('mo-config')?.addEventListener('click',function(e){if(e.target===this)closeModal('config');});
 document.getElementById('mo-subs')?.addEventListener('click',function(e){if(e.target===this)closeModal('subsModal');});
+document.getElementById('mo-edit')?.addEventListener('click',function(e){if(e.target===this)closeModal('editLanc');});
 
 // ═══ ABA MOVIMENTOS ═══
 let mvSel={};// {lancId:true}
@@ -509,7 +510,7 @@ function renderMovList(){
     h+='<td>'+(l.nrOm||'')+'</td><td>'+(l.tutor||'')+'</td>';
     h+='<td style="max-width:180px;word-break:break-word">'+(l.descricao||'')+'</td>';
     h+='<td style="font-size:.58rem;color:var(--mt)">'+(l.origem==='importado'?'Imp':'Man')+'</td>';
-    h+='<td>'+(l.origem!=='importado'?'<button class="bd" style="font-size:.56rem;padding:2px 5px" onclick="rmMov(\''+nm+'\',\''+l.id+'\')">✕</button>':'')+'</td></tr>';
+    h+='<td style="white-space:nowrap"><button class="bs" style="font-size:.56rem;padding:2px 5px;min-width:0" onclick="editLanc(\''+nm.replace(/'/g,"\\'")+'\',\''+l.id+'\')">✏</button> <button class="bd" style="font-size:.56rem;padding:2px 5px" onclick="rmMov(\''+nm.replace(/'/g,"\\'")+'\',\''+l.id+'\')">✕</button></td></tr>';
   });
   h+='</tbody>';tbl.innerHTML=h;
   updMvSelCnt();
@@ -535,7 +536,89 @@ function addMov(){
   document.getElementById('mv-nf').value='';document.getElementById('mv-cnpj').value='';document.getElementById('mv-partida').value='';
   renderMovList();
 }
-function rmMov(n,id){if(!confirm('Remover?'))return;rmLanc(n,id);delete mvSel[id];renderMovList();}
+function rmMov(n,id){if(!confirm('Remover este lançamento?'))return;rmLanc(n,id);delete mvSel[id];renderMovList();}
+
+// ═══ EDITAR LANÇAMENTO ═══
+let editingLanc=null;// {substancia, id}
+function editLanc(subNm, lancId){
+  const s=getSM(subNm);
+  const l=s.lancamentos.find(x=>x.id===lancId);
+  if(!l){alert('Lançamento não encontrado.');return;}
+  editingLanc={substancia:subNm,id:lancId};
+  document.getElementById('ed-title').textContent='Editar Lançamento — '+subNm+' ('+lancId.slice(0,8)+'…)';
+  document.getElementById('ed-tipo').value=l.tipo;
+  document.getElementById('ed-qtd').value=l.qtd||0;
+  document.getElementById('ed-data').value=l.data||'';
+  document.getElementById('ed-desc').value=l.descricao||'';
+  // Saída fields
+  document.getElementById('ed-tutor').value=l.tutor||'';
+  document.getElementById('ed-cpf').value=normCPF(l.cpf||getC(l.tutor)||'');
+  document.getElementById('ed-endereco').value=l.endereco||getE(l.tutor)||'';
+  document.getElementById('ed-prescritor').value=l.prescritor||'';
+  document.getElementById('ed-crmv').value=l.crmvNr||'';
+  document.getElementById('ed-uf').value=l.crmvUf||'GO';
+  document.getElementById('ed-cadmapa').value=l.cadMapa||getLancCadMapa(l)||'';
+  document.getElementById('ed-om').value=l.nrOm||'';
+  document.getElementById('ed-doc').value=l.nrDoc||'';
+  document.getElementById('ed-receita').value=l.nrReceita||'';
+  document.getElementById('ed-calculo').value=l.calculo||'';
+  // Entrada fields
+  document.getElementById('ed-nf').value=l.nfNumero||'';
+  document.getElementById('ed-cnpjf').value=l.cnpjFornecedor||'';
+  document.getElementById('ed-partida').value=l.nrPartida||'';
+  toggleEditFields(l.tipo);
+  document.getElementById('mo-edit').classList.add('a');
+}
+function toggleEditFields(tipo){
+  const sf=document.getElementById('ed-saida-fields');
+  const ef=document.getElementById('ed-entrada-fields');
+  sf.style.display=tipo==='saida'?'grid':'none';sf.style.gap='8px';
+  ef.style.display=tipo==='entrada'?'grid':'none';ef.style.gap='8px';
+}
+document.getElementById('ed-tipo')?.addEventListener('change',function(){toggleEditFields(this.value);});
+
+function saveEditLanc(){
+  if(!editingLanc)return;
+  const all=ldM();
+  const sn=editingLanc.substancia;
+  if(!all[sn])return;
+  const l=all[sn].lancamentos.find(x=>x.id===editingLanc.id);
+  if(!l){alert('Lançamento não encontrado.');return;}
+  
+  l.tipo=document.getElementById('ed-tipo').value;
+  l.qtd=parseFloat(document.getElementById('ed-qtd').value)||0;
+  l.data=document.getElementById('ed-data').value;
+  l.descricao=up(document.getElementById('ed-desc').value);
+  
+  if(l.tipo==='saida'){
+    l.tutor=up(document.getElementById('ed-tutor').value);
+    l.cpf=normCPF(document.getElementById('ed-cpf').value);
+    l.endereco=up(document.getElementById('ed-endereco').value);
+    l.prescritor=up(document.getElementById('ed-prescritor').value);
+    l.crmvNr=document.getElementById('ed-crmv').value.trim();
+    l.crmvUf=up(document.getElementById('ed-uf').value)||'GO';
+    l.cadMapa=document.getElementById('ed-cadmapa').value.trim();
+    l.nrOm=document.getElementById('ed-om').value.trim();
+    l.nrDoc=document.getElementById('ed-doc').value.trim();
+    l.nrReceita=document.getElementById('ed-receita').value.trim();
+    l.calculo=up(document.getElementById('ed-calculo').value);
+    // Sync to cadastros
+    if(l.tutor&&l.cpf)setC(l.tutor,l.cpf);
+    if(l.tutor&&l.endereco)setE(l.tutor,l.endereco);
+    if(l.prescritor&&l.crmvNr)setP2(l.prescritor,l.crmvNr,l.crmvUf,l.cadMapa);
+  } else if(l.tipo==='entrada'){
+    l.nfNumero=document.getElementById('ed-nf').value.trim();
+    l.cnpjFornecedor=document.getElementById('ed-cnpjf').value.trim();
+    l.nrPartida=document.getElementById('ed-partida').value.trim();
+    l.fornecedor=l.descricao;
+  }
+  
+  svM(all);
+  recalc(sn);
+  closeModal('editLanc');
+  editingLanc=null;
+  renderMovList();
+}
 
 // ═══ ESTOQUE INICIAL ═══
 function editEI(){
