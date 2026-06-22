@@ -342,6 +342,44 @@ footer{margin-top:40px;text-align:center;font-family:var(--mono);font-size:.68re
 </div><div class="brow" style="margin-top:16px"><button class="bg" style="padding:10px 20px;width:auto" onclick="saveConfig()">Salvar</button></div></div></div>
 
 <div class="mo" id="mo-subs"><div class="ml"><button class="mc" onclick="closeModal('subsModal')">✕</button><h3>Substâncias Controladas</h3><div id="subs-list" style="max-height:40vh;overflow-y:auto"></div><div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--bd)"><div style="font-family:var(--mono);font-size:.65rem;color:var(--mt);margin-bottom:6px">ADICIONAR SUBSTÂNCIA:</div><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:end"><input id="add-s-nome" placeholder="Nome (ex: Mirtazapina)" style="flex:2;min-width:120px;background:var(--sf2);border:1px solid var(--bd);border-radius:5px;padding:5px 7px;font-family:var(--sans);font-size:.75rem;color:var(--tx)"/><select id="add-s-lista" style="width:55px;background:var(--sf2);border:1px solid var(--bd);border-radius:5px;padding:5px 7px;font-family:var(--sans);font-size:.75rem;color:var(--tx)"><option>C1</option><option>A2</option><option>B1</option></select><input id="add-s-dcb" placeholder="DCB" style="width:60px;background:var(--sf2);border:1px solid var(--bd);border-radius:5px;padding:5px 7px;font-family:var(--sans);font-size:.75rem;color:var(--tx)"/><button class="bs bsm" onclick="addSubManual()">+ Adicionar</button></div></div><div class="brow" style="margin-top:14px"><button class="bs bsm" onclick="closeModal('subsModal')">Fechar</button></div></div></div>
+
+<div class="mo" id="mo-edit"><div class="ml" style="max-width:540px"><button class="mc" onclick="closeModal('editLanc')">✕</button><h3 id="ed-title">Editar Lançamento</h3>
+<div style="display:grid;gap:8px;font-size:.78rem">
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+<div class="fd"><label>Tipo</label><select id="ed-tipo"><option value="entrada">Entrada</option><option value="saida">Saída</option><option value="perda">Perda</option></select></div>
+<div class="fd"><label>Qtd (g)</label><input type="number" id="ed-qtd" step="0.0001" min="0"/></div>
+<div class="fd"><label>Data</label><input type="date" id="ed-data"/></div>
+</div>
+<div class="fd"><label>Descrição</label><input id="ed-desc"/></div>
+<div id="ed-saida-fields" style="display:grid;gap:8px">
+<div style="display:grid;grid-template-columns:2fr 1fr;gap:8px">
+<div class="fd"><label>Tutor</label><input id="ed-tutor"/></div>
+<div class="fd"><label>CPF</label><input id="ed-cpf" oninput="this.value=fmtCPF(this.value)"/></div>
+</div>
+<div class="fd"><label>Endereço</label><input id="ed-endereco"/></div>
+<div style="display:grid;grid-template-columns:2fr 1fr 50px 1fr;gap:8px">
+<div class="fd"><label>Prescritor</label><input id="ed-prescritor"/></div>
+<div class="fd"><label>CRMV</label><input id="ed-crmv"/></div>
+<div class="fd"><label>UF</label><input id="ed-uf" maxlength="2" value="GO"/></div>
+<div class="fd"><label>Cad. MAPA</label><input id="ed-cadmapa"/></div>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px">
+<div class="fd"><label>Nº OM</label><input id="ed-om"/></div>
+<div class="fd"><label>Nº Doc</label><input id="ed-doc"/></div>
+<div class="fd"><label>Nº Receita</label><input id="ed-receita"/></div>
+<div class="fd"><label>Concentração</label><input id="ed-calculo"/></div>
+</div>
+</div>
+<div id="ed-entrada-fields" style="display:none">
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+<div class="fd"><label>Nº NF</label><input id="ed-nf"/></div>
+<div class="fd"><label>CNPJ Forn.</label><input id="ed-cnpjf"/></div>
+<div class="fd"><label>Nº Partida</label><input id="ed-partida"/></div>
+</div>
+</div>
+</div>
+<div class="brow" style="margin-top:14px"><button class="bg" style="padding:10px 20px;width:auto" onclick="saveEditLanc()">✓ Salvar</button><button class="bs bsm" onclick="closeModal('editLanc')" style="margin-left:8px">Cancelar</button></div>
+</div></div>
 <footer>
 <p>R S O Manipulação Animal · Paulo Edson Fernandes — CRF-GO 9303 · GO 0198-8</p>
 <p style="margin-top:3px">Processamento 100% local — nenhum dado enviado a servidores · Portaria MAPA nº 837/2025 · v5.0</p>
