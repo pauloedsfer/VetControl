@@ -232,10 +232,43 @@ document.getElementById('btn-proc')?.addEventListener('click',async()=>{
     const entradas=movs.filter(m=>m.tipo==='entrada');
     const perdas=movs.filter(m=>m.tipo==='perda');
     lg('Movimento: '+saidas.length+' dispensações, '+entradas.length+' entradas (N.E.), '+perdas.length+' perdas (A.E.)','ok');
-    setP(40,'Lendo CLIENTE_END...');
+    setP(40,'Lendo REGISTRO...');
     const ced=extrCE(rawCE);lg('Receituário: '+Object.keys(ced).length+' registros','ok');
     setP(60,'Cruzando...');
     dadosRev=cruzar(movs,ced);
+    
+    // ═══ CROSS-REFERENCE: PDF MAPA → XLS (CRMV↔SIPEAGRO por nrOm) ═══
+    if(pdfParsedVendas.length>0){
+      setP(68,'Cruzando com PDF MAPA...');
+      const pdfByOM={};
+      for(const v of pdfParsedVendas){if(v.nrOm)pdfByOM[v.nrOm]=v;}
+      let linked=0;
+      for(const d of dadosRev){
+        if(d.tipo!=='saida'||!d.nrOm)continue;
+        const pv=pdfByOM[d.nrOm];
+        if(!pv)continue;
+        // Enrich CPF from PDF if missing
+        if(!d.cpf&&pv.cpf)d.cpf=normCPF(pv.cpf);
+        // Enrich Cadastro MAPA from PDF
+        if(!d.cadMapa&&pv.cadSipeagro){d.cadMapa=pv.cadSipeagro;linked++;}
+        // Build CRMV↔SIPEAGRO mapping for the prescritor cadastro
+        if(d.crmvNr&&pv.cadSipeagro&&pv.prescritor){
+          const pKey=nn(pv.prescritor);
+          const existing=getP(pv.prescritor);
+          if(!existing.cadMapa){
+            setP2(pv.prescritor,d.crmvNr,d.crmvUf||'GO',pv.cadSipeagro);
+          }
+          // Also try to match abbreviated XLS prescritor with full PDF prescritor
+          if(d.prescritor&&d.prescritor!==pv.prescritor){
+            const dKey=nn(d.prescritor);
+            const eD=getP(d.prescritor);
+            if(!eD.cadMapa)setP2(d.prescritor,d.crmvNr,d.crmvUf||'GO',pv.cadSipeagro);
+          }
+        }
+      }
+      if(linked>0)lg('✓ Cruzamento PDF↔XLS: '+linked+' cadastros MAPA vinculados por OM','ok');
+    }
+    
     const datas=dadosRev.filter(d=>d.data).map(d=>d.data);
     const perAuto=autoPer(datas);
     if(perAuto)document.getElementById('inp-per').value=perAuto;
@@ -586,7 +619,8 @@ function printCorpo(){
     // Outras informações conforme Art 11 §4
     let info='';
     if(l.tipo==='saida'){
-      info=[l.tutor,l.cpf?'CPF:'+l.cpf:'',l.nrReceita?'Rec:'+l.nrReceita:'',l.prescritor?'CRMV-'+(l.crmvUf||'GO')+' '+l.crmvNr:'',getLancCadMapa(l)?'MAPA:'+getLancCadMapa(l):''].filter(Boolean).join(' | ');
+      const _cpf=l.cpf||getC(l.tutor)||'';
+      info=[l.tutor,_cpf?'CPF:'+normCPF(_cpf):'',l.nrReceita?'Rec:'+l.nrReceita:'',l.prescritor?'CRMV-'+(l.crmvUf||'GO')+' '+l.crmvNr:'',getLancCadMapa(l)?'MAPA:'+getLancCadMapa(l):''].filter(Boolean).join(' | ');
     } else if(l.tipo==='entrada'){
       info=['ENTRADA',l.nrPartida?'Partida:'+l.nrPartida:'',l.nfNumero?'NF:'+l.nfNumero:'',l.cnpjFornecedor?'CNPJ:'+l.cnpjFornecedor:'',l.fornecedor||l.descricao].filter(Boolean).join(' | ');
     } else {
@@ -614,8 +648,9 @@ function printEtq(modo){
   if(modo==='linear'){
     html='<div class="pr-etql">';
     for(const l of lancs){
+      const _c=normCPF(l.cpf||getC(l.tutor)||'');
       html+='<div class="eql"><div class="eql-t"><strong>'+l.substancia+'</strong><span>OM: '+l.nrOm+'</span><span>DOC: '+(l.nrDoc||'')+'</span><span>Data: '+etqDt(l)+'</span><span>Qtd: '+(l.qtd?l.qtd.toFixed(4)+' g':'')+'</span></div>'+
-      '<div class="eql-b"><span><strong>Tutor:</strong> '+(l.tutor||'')+'</span><span><strong>CPF:</strong> '+(l.cpf||'___________')+'</span><span><strong>End.:</strong> '+(l.endereco||'')+'</span></div>'+
+      '<div class="eql-b"><span><strong>Tutor:</strong> '+(l.tutor||'')+'</span><span><strong>CPF:</strong> '+(_c||'___________')+'</span><span><strong>End.:</strong> '+(l.endereco||getE(l.tutor)||'')+'</span></div>'+
       '<div class="eql-b"><span><strong>Prescritor:</strong> '+(l.prescritor||'')+'</span><span><strong>CRMV-'+(l.crmvUf||'GO')+':</strong> '+(l.crmvNr||'')+'</span><span><strong>Conc.:</strong> '+(l.calculo||'')+'</span></div>'+
       '<div class="eql-r">RT: <span class="eql-rl"></span></div></div>';
     }
@@ -626,11 +661,12 @@ function printEtq(modo){
     for(const p of pags){
       html+='<div class="eq-page">';
       for(const l of p){
+        const _c2=normCPF(l.cpf||getC(l.tutor)||'');
         html+='<div class="eq"><div class="eq-s">'+(l.substancia||'')+'</div>'+
         '<div class="eq-f"><strong>OM:</strong> '+l.nrOm+' <strong>DOC:</strong> '+(l.nrDoc||'')+' <strong>Data:</strong> '+etqDt(l)+'</div>'+
         '<div class="eq-f"><strong>Tutor:</strong> '+(l.tutor||'')+'</div>'+
-        '<div class="eq-f"><strong>CPF:</strong> '+(l.cpf||'_________')+'</div>'+
-        '<div class="eq-f"><strong>End.:</strong> '+(l.endereco||'')+'</div>'+
+        '<div class="eq-f"><strong>CPF:</strong> '+(_c2||'_________')+'</div>'+
+        '<div class="eq-f"><strong>End.:</strong> '+(l.endereco||getE(l.tutor)||'')+'</div>'+
         '<div class="eq-f"><strong>Presc.:</strong> '+(l.prescritor||'')+' <strong>CRMV-'+(l.crmvUf||'GO')+':</strong> '+(l.crmvNr||'')+'</div>'+
         '<div class="eq-f"><strong>Conc.:</strong> '+(l.calculo||'')+' <strong>Qtd:</strong> '+(l.qtd?l.qtd.toFixed(4)+' g':'')+'</div>'+
         '<div class="eq-rt"><span>RT:</span> <span class="eq-rl"></span></div></div>';
@@ -673,7 +709,9 @@ function printAnexoIX(){
   for(const s of SUB){
     const sm=getSM(s.n);
     sm.lancamentos.filter(l=>l.tipo==='saida').forEach(l=>{
-      html+='<tr><td>'+s.n+'</td><td>'+s.l+'</td><td>'+l.qtd.toFixed(4)+'</td><td>'+(l.cpf||'')+'</td><td>'+(l.tutor||'')+'</td><td>'+(l.prescritor||'')+'</td><td>'+getLancCadMapa(l)+'</td><td>'+(l.nrOm||'')+'</td><td>'+(l.nrDoc||'')+'</td><td>'+(l.data||'')+'</td></tr>';
+      const cpf=l.cpf||getC(l.tutor)||'';
+      const cadM=getLancCadMapa(l);
+      html+='<tr><td>'+s.n+'</td><td>'+s.l+'</td><td>'+l.qtd.toFixed(4)+'</td><td>'+normCPF(cpf)+'</td><td>'+(l.tutor||'')+'</td><td>'+(l.prescritor||'')+'</td><td>'+cadM+'</td><td>'+(l.nrOm||'')+'</td><td>'+(l.nrDoc||'')+'</td><td>'+(l.data||'')+'</td></tr>';
     });
   }
   html+='</table>';
@@ -730,7 +768,8 @@ function printAnexoVIII(){
   for(const s of SUB){
     const sm=getSM(s.n);
     sm.lancamentos.filter(l=>l.tipo==='saida').forEach(l=>{
-      html+='<tr><td>'+s.n+'</td><td>'+s.l+'</td><td>'+l.qtd.toFixed(4)+'</td><td>'+(l.cpf||'')+'</td><td>'+(l.tutor||'')+'</td><td>'+getLancCadMapa(l)+'</td><td>'+(l.crmvNr?'CRMV-'+(l.crmvUf||'GO')+' '+l.crmvNr:'')+'</td><td>'+(l.nrReceita||'')+'</td><td>'+(l.nrOm||'')+'</td><td>'+(l.data||'')+'</td></tr>';
+      const _cpf8=normCPF(l.cpf||getC(l.tutor)||'');
+      html+='<tr><td>'+s.n+'</td><td>'+s.l+'</td><td>'+l.qtd.toFixed(4)+'</td><td>'+_cpf8+'</td><td>'+(l.tutor||'')+'</td><td>'+getLancCadMapa(l)+'</td><td>'+(l.crmvNr?'CRMV-'+(l.crmvUf||'GO')+' '+l.crmvNr:'')+'</td><td>'+(l.nrReceita||'')+'</td><td>'+(l.nrOm||'')+'</td><td>'+(l.data||'')+'</td></tr>';
     });
   }
   html+='</table>';
