@@ -725,17 +725,40 @@ function printCorpo(){
 function etqDt(l){if(!l.data)return'';const dt=new Date(l.data+'T12:00:00');return isNaN(dt)?l.data:fmtD(dt);}
 function printEtq(modo){
   const nm=document.getElementById('mv-sub').value;
+  const subInfo=ldSubs().find(s=>s.n===nm)||{l:''};
   const lancs=getSelLancs(nm).filter(l=>l.tipo==='saida');
   if(!lancs.length){alert('Nenhuma saída para etiquetas.');return;}
+  // Ensure lista is populated
+  lancs.forEach(l=>{if(!l.lista)l.lista=subInfo.l;if(!l.substancia)l.substancia=nm;});
   let html='';
   if(modo==='linear'){
     html='<div class="pr-etql">';
     for(const l of lancs){
       const _c=normCPF(l.cpf||getC(l.tutor)||'');
-      html+='<div class="eql"><div class="eql-t"><strong>'+l.substancia+'</strong><span>OM: '+l.nrOm+'</span><span>DOC: '+(l.nrDoc||'')+'</span><span>Data: '+etqDt(l)+'</span><span>Qtd: '+(l.qtd?l.qtd.toFixed(4)+' g':'')+'</span></div>'+
-      '<div class="eql-b"><span><strong>Tutor:</strong> '+(l.tutor||'')+'</span><span><strong>CPF:</strong> '+(_c||'___________')+'</span><span><strong>End.:</strong> '+(l.endereco||getE(l.tutor)||'')+'</span></div>'+
-      '<div class="eql-b"><span><strong>Prescritor:</strong> '+(l.prescritor||'')+'</span><span><strong>CRMV-'+(l.crmvUf||'GO')+':</strong> '+(l.crmvNr||'')+'</span><span><strong>Conc.:</strong> '+(l.calculo||'')+'</span></div>'+
-      '<div class="eql-r">RT: <span class="eql-rl"></span></div></div>';
+      const _e=l.endereco||getE(l.tutor)||'';
+      const _cm=getLancCadMapa(l);
+      html+='<div class="eql">'+
+        '<div class="eql-h">'+
+          '<span class="eql-sub">'+l.substancia+' ('+l.lista+')</span>'+
+          '<span class="eql-sep"></span><span>'+etqDt(l)+'</span>'+
+          '<span class="eql-sep"></span><span>OM: '+(l.nrOm||'')+'</span>'+
+          '<span class="eql-sep"></span><span>Doc: '+(l.nrDoc||'')+'</span>'+
+          '<span class="eql-sep"></span><span>Qtd: '+(l.qtd?l.qtd.toFixed(4)+'g':'')+'</span>'+
+          '<span class="eql-sep"></span><span>Rec: '+(l.nrReceita||'')+'</span>'+
+        '</div>'+
+        '<div class="eql-row">'+
+          '<div class="eql-c eql-grow"><b>Tutor</b>'+(l.tutor||'')+'</div>'+
+          '<div class="eql-c"><b>CPF</b>'+(_c||'___.___.___-__')+'</div>'+
+          '<div class="eql-c eql-grow"><b>End</b>'+_e+'</div>'+
+        '</div>'+
+        '<div class="eql-row">'+
+          '<div class="eql-c eql-grow"><b>Presc</b>'+(l.prescritor||'')+'</div>'+
+          '<div class="eql-c"><b>CRMV-'+(l.crmvUf||'GO')+'</b>'+(l.crmvNr||'')+'</div>'+
+          (_cm?'<div class="eql-c"><b>MAPA</b>'+_cm+'</div>':'')+
+          '<div class="eql-c"><b>Conc</b>'+(l.calculo||'')+'</div>'+
+          '<div class="eql-c"><b>RT</b><span class="eql-rl"></span></div>'+
+        '</div>'+
+      '</div>';
     }
     html+='</div>';
   } else {
