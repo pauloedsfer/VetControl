@@ -1,5 +1,5 @@
 /**
- * BOLOTA CONTROL v5.0 — Fórmula Animal
+ * CONTROLE ESPECIAL v5.0 — Fórmula Animal
  * Escrituração digital de substâncias controladas veterinárias
  * Conformidade Portaria MAPA nº 837/2025
  */
@@ -76,7 +76,7 @@ function getSemDates(){const a=parseInt(document.getElementById('mv-ano').value)
 function filterBySem(lancs){const{ini,fim}=getSemDates();return lancs.filter(l=>l.data&&l.data>=ini&&l.data<=fim);}
 function getLancCadMapa(l){if(l.cadMapa)return l.cadMapa;if(l.prescritor){var p=getP(l.prescritor);return p.cadMapa||'';}return '';}
 function openConfigModal(){var c=ldCfg();document.getElementById('cfg-fantasia').value=c.fantasia||'';document.getElementById('cfg-razao').value=c.razao||'';document.getElementById('cfg-cnpj').value=c.cnpj||'';document.getElementById('cfg-mapa').value=c.mapa||'';document.getElementById('cfg-endereco').value=c.endereco||'';document.getElementById('cfg-rt-nome').value=c.rtNome||'';document.getElementById('cfg-rt-crf').value=c.rtCrf||'';document.getElementById('mo-config').classList.add('a');}
-function saveConfig(){svCfg({fantasia:document.getElementById('cfg-fantasia').value.trim(),razao:document.getElementById('cfg-razao').value.trim(),cnpj:document.getElementById('cfg-cnpj').value.trim(),mapa:document.getElementById('cfg-mapa').value.trim(),endereco:document.getElementById('cfg-endereco').value.trim(),rtNome:document.getElementById('cfg-rt-nome').value.trim(),rtCrf:document.getElementById('cfg-rt-crf').value.trim()});closeModal('config');const _nm=ldCfg().fantasia||'';document.getElementById('inp-estab').value=_nm;document.getElementById('hdr-estab').textContent=_nm||'Fórmula Animal · Escrituração de Controlados';}
+function saveConfig(){svCfg({fantasia:document.getElementById('cfg-fantasia').value.trim(),razao:document.getElementById('cfg-razao').value.trim(),cnpj:document.getElementById('cfg-cnpj').value.trim(),mapa:document.getElementById('cfg-mapa').value.trim(),endereco:document.getElementById('cfg-endereco').value.trim(),rtNome:document.getElementById('cfg-rt-nome').value.trim(),rtCrf:document.getElementById('cfg-rt-crf').value.trim()});closeModal('config');const _nm=ldCfg().fantasia||'';document.getElementById('inp-estab').value=_nm;document.getElementById('hdr-estab').textContent=_nm||'Fórmula Animal · Escrituração Digital';}
 
 // ═══ TABS ═══
 function swTab(id,btn){
@@ -1468,9 +1468,9 @@ chkBkp();
 const _cfg=ldCfg();
 const _hdrE=document.getElementById('hdr-estab');
 if(_cfg.fantasia)_hdrE.textContent=_cfg.fantasia;
-else _hdrE.textContent='Fórmula Animal · Escrituração de Controlados';
+else _hdrE.textContent='Fórmula Animal · Escrituração Digital';
 setTimeout(function(){try{renderMov();}catch(e){console.error('renderMov init:',e);}},100);
-console.log('Bolota Control v5.0 inicializado com '+SUB.length+' substâncias');
+console.log('Controle Especial v5.0 inicializado com '+SUB.length+' substâncias');
 }catch(e){console.error('INIT ERROR:',e);}
 // Auto-migrar dados v3 se necessário
 try{(function(){
