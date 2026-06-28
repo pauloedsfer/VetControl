@@ -3,24 +3,23 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>Controlados · Fórmula Animal v5</title>
+<title>Controle Especial · Fórmula Animal</title>
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" async></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#F4F1ED;--sf:#FFFFFF;--sf2:#EDE9E3;--bd:#C4C1E6;
-  --ac:#7566A0;--ac2:#8375AA;--acd:#5E5280;
-  --gn:#4A9A7E;--yw:#B8548A;--rd:#C44040;
-  --tx:#2D2745;--mt:#7A7590;
+  --bg:#FFFFFF;--sf:#FFFFFF;--sf2:#F4F1ED;--bd:#C4C1E6;
+  --ac:#7566A0;--ac2:#8375AA;--acd:#524589;
+  --gn:#3D8B6E;--yw:#B8548A;--rd:#C44040;
+  --tx:#1E1832;--mt:#6B6580;
   --mono:'DM Mono',monospace;--sans:'Nunito',sans-serif;--dsp:'Nunito',sans-serif
 }
 body{background:var(--bg);color:var(--tx);font-family:var(--sans);min-height:100vh;font-weight:500}
-body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(var(--bd) 1px,transparent 1px),linear-gradient(90deg,var(--bd) 1px,transparent 1px);background-size:56px 56px;opacity:.08;pointer-events:none;z-index:0}
 .wr{position:relative;z-index:1;max-width:1020px;margin:0 auto;padding:40px 20px 80px}
 header{display:flex;align-items:center;gap:14px;margin-bottom:36px}
-.logo{width:48px;height:48px;background:var(--ac);border-radius:12px;display:grid;place-items:center;box-shadow:0 4px 16px rgba(117,102,160,.35)}
+.logo{width:48px;height:48px;background:var(--acd);border-radius:12px;display:grid;place-items:center;box-shadow:0 4px 16px rgba(82,69,137,.35)}
 .logo svg{width:24px;height:24px}
 .hdr h1{font-family:var(--dsp);font-size:1.4rem;font-weight:900;letter-spacing:-.01em;color:var(--acd)}
 .hdr p{font-size:.78rem;color:var(--mt);font-family:var(--mono);margin-top:2px}
@@ -35,7 +34,7 @@ header{display:flex;align-items:center;gap:14px;margin-bottom:36px}
 .tp{display:none}.tp.a{display:block}
 .sl{font-family:var(--mono);font-size:.68rem;font-weight:500;letter-spacing:.11em;text-transform:uppercase;color:var(--ac);margin-bottom:10px;margin-top:18px}
 .sl:first-child{margin-top:0}
-.cd{background:var(--sf);border:1px solid var(--bd);border-radius:12px;padding:20px;margin-bottom:14px;box-shadow:0 1px 4px rgba(117,102,160,.06)}
+.cd{background:var(--sf);border:1px solid var(--bd);border-radius:12px;padding:20px;margin-bottom:14px;box-shadow:0 2px 8px rgba(82,69,137,.08)}
 .ugrid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}@media(max-width:560px){.ugrid{grid-template-columns:1fr}}
 .dz{position:relative;border:2px dashed var(--bd);border-radius:10px;padding:20px 14px;text-align:center;cursor:pointer;transition:.2s;background:var(--sf2)}
 .dz:hover,.dz.dov{border-color:var(--ac);background:rgba(117,102,160,.06)}
@@ -173,8 +172,8 @@ footer{margin-top:40px;text-align:center;font-family:var(--mono);font-size:.68re
 <div class="wr">
 <div class="reminder" id="bkp-rem">⚠ Mais de 7 dias sem backup. <button class="bs bsm" onclick="exportarBackup()">Exportar</button><button class="bsm" style="background:0;border:0;color:var(--mt);cursor:pointer" onclick="this.parentElement.classList.remove('v')">✕</button></div>
 <header>
-<div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg></div>
-<div class="hdr"><h1>Controlados</h1><p>R S O MANIPULAÇÃO ANIMAL · GO 0198-8</p></div>
+<div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="8" height="14" rx="4" ry="4" transform="rotate(-45 7 15)"/><line x1="5.5" y1="12.5" x2="10.5" y2="17.5" opacity=".4"/><rect x="13" y="2" width="8" height="14" rx="4" ry="4" transform="rotate(-45 17 9)"/><line x1="15.5" y1="6.5" x2="20.5" y2="11.5" opacity=".4"/></svg></div>
+<div class="hdr"><h1>Controle Especial</h1><p id="hdr-estab">Fórmula Animal · Escrituração Digital</p></div>
 <span class="vtag">v5.0</span>
 </header>
 <div class="tabs">
@@ -186,21 +185,27 @@ footer{margin-top:40px;text-align:center;font-family:var(--mono);font-size:.68re
 
 <!-- ═══ TAB IMPORTAR ═══ -->
 <div class="tp" id="tp-imp">
-<div class="sl">01 · Upload dos relatórios Farma Fácil</div>
+
+<div class="cd" style="background:rgba(117,102,160,.04);border-color:var(--ac);margin-bottom:18px;padding:14px 18px">
+<div style="font-family:var(--dsp);font-weight:800;color:var(--acd);font-size:.88rem;margin-bottom:4px">Como importar seus dados</div>
+<div style="font-family:var(--mono);font-size:.66rem;color:var(--mt);line-height:1.6">Exporte os arquivos XLS do Farma Fácil e o relatório MAPA em PDF. Siga as etapas abaixo na ordem indicada. O PDF é opcional mas enriquece com CPFs e cadastros SIPEAGRO.</div>
+</div>
+
+<div class="sl">Etapa 1 · Selecionar arquivos do Farma Fácil</div>
 <div class="cd">
 <div class="ugrid">
-<div class="dz" id="z-m"><input type="file" id="f-m" accept=".xls,.xlsx"/><span class="di">📋</span><span class="dl">MOVIMENTO.XLS</span><span class="dh">Movimento Controlados Período</span><div class="df" id="fn-m"></div></div>
+<div class="dz" id="z-m"><input type="file" id="f-m" accept=".xls,.xlsx"/><span class="di">📊</span><span class="dl">MOVIMENTO.XLS</span><span class="dh">Movimentação de Estoque</span><div class="df" id="fn-m"></div></div>
 <div class="dz" id="z-c"><input type="file" id="f-c" accept=".xls,.xlsx"/><span class="di">📄</span><span class="dl">REGISTRO.XLS</span><span class="dh">Registro de Receituário Geral</span><div class="df" id="fn-c"></div></div>
 </div>
 <div class="fr">
-<div class="fd"><label>Estabelecimento</label><input id="inp-estab" value="R S O MANIPULAÇÃO ANIMAL"/></div>
+<div class="fd"><label>Nome do Estabelecimento (cabeçalho impressão)</label><input id="inp-estab" placeholder="Nome do seu estabelecimento"/></div>
 <div class="fd"><label>Período (auto ao processar)</label><input id="inp-per" placeholder="Preenchido automaticamente"/></div>
 </div>
-</div>
 <button class="bp" id="btn-proc" disabled>Processar Dados</button>
+</div>
 
 <div class="rw" id="rev-wr">
-<div class="sl">02 · Revisão dos dados cruzados</div>
+<div class="sl">Etapa 2 · Revisão dos dados cruzados</div>
 <div id="al-cpf" class="alert-y" style="display:none"></div>
 <div id="al-stk" class="alert-r" style="display:none"></div>
 <div id="al-val" class="alert-y" style="display:none"></div>
@@ -220,12 +225,21 @@ footer{margin-top:40px;text-align:center;font-family:var(--mono);font-size:.68re
 <div class="pw" id="pw"><div class="pt"><div class="pb" id="pb"></div></div><div class="ptx" id="ptx">Aguardando...</div></div>
 <div class="lb" id="lb"></div>
 
-<div class="sl" style="margin-top:24px">03 · Importar PDF do Relatório MAPA</div>
+<div class="sl" style="margin-top:24px">Opcional · Importar PDF do Relatório MAPA</div>
 <div class="cd">
-<div class="dz" id="z-pdf"><input type="file" id="f-pdf" accept=".pdf"/><span class="di">📑</span><span class="dl">Relatório MAPA (PDF)</span><span class="dh">Extrai CPFs dos tutores e Cadastros SIPEAGRO dos prescritores</span><div class="df" id="fn-pdf"></div></div>
+<div style="font-family:var(--mono);font-size:.64rem;color:var(--mt);margin-bottom:8px;line-height:1.5">Se processado antes da Etapa 1, os dados de CPF e SIPEAGRO serão cruzados automaticamente com o XLS.</div>
+<div class="dz" id="z-pdf"><input type="file" id="f-pdf" accept=".pdf"/><span class="di">📑</span><span class="dl">Relatório MAPA (PDF)</span><span class="dh">Extrai CPFs e Cadastros SIPEAGRO</span><div class="df" id="fn-pdf"></div></div>
 <button class="bp" id="btn-pdf" disabled style="margin-top:10px">Processar PDF</button>
 <div class="pw" id="pw-pdf" style="display:none;margin-top:10px"><div class="pt"><div class="pb" id="pb-pdf"></div></div><div class="ptx" id="ptx-pdf">Aguardando...</div></div>
 <div class="lb" id="lb-pdf" style="display:none"></div>
+</div>
+
+<div class="sl" style="margin-top:24px">Opcional · Importar Base SIPEAGRO (veterinários)</div>
+<div class="cd">
+<div style="font-family:var(--mono);font-size:.64rem;color:var(--mt);margin-bottom:8px;line-height:1.5">Exporte a planilha do painel MAPA (<a href="https://mapa-indicadores.agricultura.gov.br/publico/single/?appid=95a12fdb-9e5a-4faa-ac26-38a2244c6a39&sheet=1a688491-6640-492f-ae83-f8fedb3d0aaf" target="_blank" style="color:var(--ac)">Consulta SIPEAGRO</a>). Filtre por UF, clique com botão direito na tabela → Exportar. O sistema cruza o Nº CRMV com os prescritores já cadastrados e preenche automaticamente o Cadastro MAPA (SIPEAGRO).</div>
+<div class="dz" id="z-sip"><input type="file" id="f-sip" accept=".xls,.xlsx"/><span class="di">🏥</span><span class="dl">Base SIPEAGRO (XLSX)</span><span class="dh">Médicos Veterinários Cadastrados</span><div class="df" id="fn-sip"></div></div>
+<button class="bp" id="btn-sip" disabled style="margin-top:10px" onclick="processSipeagro()">Cruzar com Prescritores</button>
+<div class="lb" id="lb-sip" style="display:none;margin-top:8px"></div>
 </div>
 
 <div class="rw" id="pdf-rev-wr" style="display:none">
@@ -307,7 +321,7 @@ footer{margin-top:40px;text-align:center;font-family:var(--mono);font-size:.68re
 
 <div class="sl" style="margin-top:6px">Exportar Relatório Semestral para o MAPA</div>
 <div class="cd" style="padding:14px 18px">
-<div style="font-family:var(--mono);font-size:.64rem;color:var(--mt);line-height:1.5;margin-bottom:10px">Gera XLSX no formato do sistema gov.br (3 abas: Estoque Inicial, Entradas, Saídas em kg). Portaria MAPA nº 837/2025.</div>
+<div style="font-family:var(--mono);font-size:.64rem;color:var(--mt);line-height:1.5;margin-bottom:10px">Gera o arquivo XLSX no formato exigido pelo sistema gov.br para entrega do relatório semestral de movimentação (Portaria MAPA nº 837/2025). Inclui <b>todas</b> as substâncias com movimentação no período selecionado. Quantidades convertidas automaticamente de gramas para quilogramas.</div>
 <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end">
 <div class="fd" style="margin-bottom:0"><label>Semestre</label><select id="mapa-sem" style="width:100px"><option value="1">1º Semestre</option><option value="2">2º Semestre</option></select></div>
 <div class="fd" style="margin-bottom:0"><label>Ano</label><input type="number" id="mapa-ano" style="width:80px"/></div>
@@ -330,7 +344,7 @@ footer{margin-top:40px;text-align:center;font-family:var(--mono);font-size:.68re
 
 <!-- ═══ TAB AJUDA ═══ -->
 <div class="tp" id="tp-help">
-<div class="sl">Passo a passo — v5.0</div>
+<div class="sl">Passo a passo — Controle Especial v5.0</div>
 <div class="cd" style="line-height:1.7;font-size:.82rem;color:var(--mt)">
 <p><strong style="color:var(--tx)">1. Importar XLS:</strong> Faça upload dos XLS do Farma Fácil, revise e confirme. Os dados vão direto para os Movimentos.</p>
 <p style="margin-top:8px"><strong style="color:var(--tx)">2. Importar PDF MAPA:</strong> Faça upload do relatório PDF gerado pelo Farma Fácil. O sistema extrai CPFs dos tutores e Cadastros SIPEAGRO dos prescritores automaticamente. Revise e confirme para popular os cadastros.</p>
@@ -339,6 +353,7 @@ footer{margin-top:40px;text-align:center;font-family:var(--mono);font-size:.68re
 <p style="margin-top:8px"><strong style="color:var(--tx)">5. Prescritores:</strong> Cadastro salva CRMV + UF + Cadastro MAPA (SIPEAGRO). Formato: "CRMV-GO 1234".</p>
 <p style="margin-top:8px"><strong style="color:var(--tx)">6. Estoque:</strong> O estoque inicial é automaticamente o saldo final dos movimentos. Edite apenas na abertura do semestre.</p>
 <p style="margin-top:8px"><strong style="color:var(--tx)">7. Backup:</strong> Exporte regularmente. O sistema avisa após 7 dias sem backup.</p>
+<p style="margin-top:8px"><strong style="color:var(--tx)">8. Exportar para MAPA:</strong> A partir de jul/2026, o relatório semestral deve ser entregue via sistema gov.br. O botão "Exportar XLSX para MAPA" gera o arquivo no formato exato (3 abas: Estoque Inicial, Entradas, Saídas em kg). Acesse: <a href="https://www.gov.br/pt-br/servicos/insercao-de-obrigatorios-para-os-fabricantes-distribuidores-comerciantes-de-produtos-de-uso-veterinario-sob-controle-especial" target="_blank" style="color:var(--ac);font-size:.75rem">Sistema MAPA</a>. Dúvidas: duvidas.relatoriocontrolados@agro.gov.br</p>
 </div>
 <div class="cd" style="font-family:var(--mono);font-size:.7rem;color:var(--mt);line-height:1.6">
 ⚠ Todos os dados (CPFs, endereços, prescritores, movimentos, histórico) ficam no <strong>localStorage</strong>. Não limpe os dados do navegador sem exportar backup.
@@ -398,8 +413,9 @@ footer{margin-top:40px;text-align:center;font-family:var(--mono);font-size:.68re
 <div class="brow" style="margin-top:14px"><button class="bg" style="padding:10px 20px;width:auto" onclick="saveEditLanc()">✓ Salvar</button><button class="bs bsm" onclick="closeModal('editLanc')" style="margin-left:8px">Cancelar</button></div>
 </div></div>
 <footer>
-<p>R S O Manipulação Animal · Paulo Edson Fernandes — CRF-GO 9303 · GO 0198-8</p>
-<p style="margin-top:3px">Processamento 100% local — nenhum dado enviado a servidores · Portaria MAPA nº 837/2025 · v5.0</p>
+<p style="font-size:.72rem;color:var(--acd);font-weight:600">Controle Especial · Fórmula Animal</p>
+<p style="margin-top:4px">Processamento 100% local — nenhum dado enviado a servidores · Portaria MAPA nº 837/2025 · v5.0</p>
+<p style="margin-top:8px;padding-top:8px;border-top:1px solid var(--bd)">Desenvolvido por <strong style="color:var(--tx)">Paulo Edson Fernandes</strong> · <a href="mailto:pauloedsfer@gmail.com" style="color:var(--ac);text-decoration:none">pauloedsfer@gmail.com</a> · <a href="https://wa.me/5562991992833" style="color:var(--ac);text-decoration:none">WhatsApp (62) 99199-2833</a></p>
 </footer>
 </div>
 <div id="print-area"></div>
