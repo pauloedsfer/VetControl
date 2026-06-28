@@ -1,8 +1,7 @@
 /**
- * CONTROLADOS v5.0 — R S O MANIPULAÇÃO ANIMAL
- * Movimentos como fonte única de verdade
+ * CONTROLE ESPECIAL v5.0 — Fórmula Animal
+ * Escrituração digital de substâncias controladas veterinárias
  * Conformidade Portaria MAPA nº 837/2025
- * v5.0: Parser de PDF MAPA (CPFs + Cadastro SIPEAGRO)
  */
 
 // ═══ STORAGE HELPERS (must be first — used by CONSTANTES) ═══
@@ -69,7 +68,7 @@ function saldoFinal(n){const s=getSM(n);if(!s.lancamentos.length)return s.estoqu
 // Backup
 function markBkp(){localStorage.setItem(K.b,new Date().toISOString());}
 function chkBkp(){const l=localStorage.getItem(K.b);if(!l||Date.now()-new Date(l).getTime()>7*864e5)document.getElementById('bkp-rem').classList.add('v');}
-const defCfg={fantasia:'R S O MANIPULACAO ANIMAL',razao:'',cnpj:'',mapa:'GO 0198-8',endereco:'',rtNome:'Paulo Edson Fernandes',rtCrf:'CRF-GO 9303'};
+const defCfg={fantasia:'',razao:'',cnpj:'',mapa:'',endereco:'',rtNome:'',rtCrf:''};
 function ldCfg(){return{...defCfg,...ls(K.cfg,{})};}function svCfg(c){sv(K.cfg,c);}
 function cfgHeader(){const c=ldCfg();return(c.razao||c.fantasia)+' CNPJ: '+(c.cnpj||'_____')+' Licenca MAPA: '+(c.mapa||'_____')+(c.endereco?'<br>'+c.endereco:'');}
 function cfgSig(){const c=ldCfg();return'<strong>'+(c.rtNome||'RT')+'</strong><br>Farmaceutico RT - '+(c.rtCrf||'CRF');}
@@ -77,7 +76,7 @@ function getSemDates(){const a=parseInt(document.getElementById('mv-ano').value)
 function filterBySem(lancs){const{ini,fim}=getSemDates();return lancs.filter(l=>l.data&&l.data>=ini&&l.data<=fim);}
 function getLancCadMapa(l){if(l.cadMapa)return l.cadMapa;if(l.prescritor){var p=getP(l.prescritor);return p.cadMapa||'';}return '';}
 function openConfigModal(){var c=ldCfg();document.getElementById('cfg-fantasia').value=c.fantasia||'';document.getElementById('cfg-razao').value=c.razao||'';document.getElementById('cfg-cnpj').value=c.cnpj||'';document.getElementById('cfg-mapa').value=c.mapa||'';document.getElementById('cfg-endereco').value=c.endereco||'';document.getElementById('cfg-rt-nome').value=c.rtNome||'';document.getElementById('cfg-rt-crf').value=c.rtCrf||'';document.getElementById('mo-config').classList.add('a');}
-function saveConfig(){svCfg({fantasia:document.getElementById('cfg-fantasia').value.trim(),razao:document.getElementById('cfg-razao').value.trim(),cnpj:document.getElementById('cfg-cnpj').value.trim(),mapa:document.getElementById('cfg-mapa').value.trim(),endereco:document.getElementById('cfg-endereco').value.trim(),rtNome:document.getElementById('cfg-rt-nome').value.trim(),rtCrf:document.getElementById('cfg-rt-crf').value.trim()});closeModal('config');document.getElementById('inp-estab').value=ldCfg().fantasia||'';}
+function saveConfig(){svCfg({fantasia:document.getElementById('cfg-fantasia').value.trim(),razao:document.getElementById('cfg-razao').value.trim(),cnpj:document.getElementById('cfg-cnpj').value.trim(),mapa:document.getElementById('cfg-mapa').value.trim(),endereco:document.getElementById('cfg-endereco').value.trim(),rtNome:document.getElementById('cfg-rt-nome').value.trim(),rtCrf:document.getElementById('cfg-rt-crf').value.trim()});closeModal('config');const _nm=ldCfg().fantasia||'';document.getElementById('inp-estab').value=_nm;document.getElementById('hdr-estab').textContent=_nm||'Fórmula Animal · Escrituração Digital';}
 
 // ═══ TABS ═══
 function swTab(id,btn){
@@ -395,7 +394,7 @@ document.getElementById('btn-confirm')?.addEventListener('click',async()=>{
     for(const n of Object.keys(all))recalc(n);
     // Salvar no histórico
     const per=document.getElementById('inp-per').value.trim();
-    const estab=up(document.getElementById('inp-estab').value)||'R S O MANIPULAÇÃO ANIMAL';
+    const estab=up(document.getElementById('inp-estab').value)||'';
     const datas=dadosRev.filter(d=>d.data).map(d=>d.data);
     const hist=ldH();
     const estFinal={};SUB.forEach(s=>{estFinal[s.n]=saldoFinal(s.n);});
@@ -995,6 +994,119 @@ function migrateV3toV4(hist, cpfs, enderecos, prescritores){
   }
 }
 
+// ═══ IMPORTAR BASE SIPEAGRO ═══
+let sipFileData=null;
+function setupSipDZ(){
+  const z=document.getElementById('z-sip'),inp=document.getElementById('f-sip'),fn=document.getElementById('fn-sip');
+  if(!z||!inp)return;
+  inp.addEventListener('change',e=>{if(e.target.files[0])readSipFile(e.target.files[0],fn,z);});
+  z.addEventListener('dragover',e=>{e.preventDefault();z.classList.add('dov');});
+  z.addEventListener('dragleave',()=>z.classList.remove('dov'));
+  z.addEventListener('drop',e=>{e.preventDefault();z.classList.remove('dov');if(e.dataTransfer.files[0])readSipFile(e.dataTransfer.files[0],fn,z);});
+}
+function readSipFile(file,fn,z){
+  fn.textContent='📎 '+file.name;
+  const r=new FileReader();
+  r.onload=e=>{try{
+    const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
+    sipFileData=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+    fn.textContent='✓ '+file.name+' ('+sipFileData.length+' registros)';
+    z.classList.add('rdy');
+    document.getElementById('btn-sip').disabled=false;
+  }catch(err){fn.textContent='✗ Erro: '+err.message;}};
+  r.readAsArrayBuffer(file);
+}
+function sipLog(m,t){const b=document.getElementById('lb-sip');b.style.display='block';const l=document.createElement('div');if(t)l.className='l'+t[0];l.textContent=m;b.appendChild(l);b.scrollTop=b.scrollHeight;}
+
+function processSipeagro(){
+  if(!sipFileData||!sipFileData.length){alert('Carregue o arquivo SIPEAGRO primeiro.');return;}
+  document.getElementById('lb-sip').innerHTML='';document.getElementById('lb-sip').style.display='none';
+  
+  // Build CRMV→SIPEAGRO map from the XLSX
+  // Columns: "Nº CADASTRO MV", "ANO", "NOME DO MÉDICO VETERINÁRIO", "Nº CRMV", "UF"
+  const sipMap={};// key: "CRMV-UF NUMERO" → {nome, cadSipeagro}
+  let parsed=0;
+  for(const row of sipFileData){
+    const cadastro=String(row['Nº CADASTRO MV']||row['N° CADASTRO MV']||'').trim();
+    const ano=String(row['ANO']||'').trim();
+    const nome=String(row['NOME DO MÉDICO VETERINÁRIO']||row['NOME']||'').trim();
+    const crmv=String(row['Nº CRMV']||row['N° CRMV']||row['CRMV']||'').trim();
+    const uf=String(row['UF']||'').trim().toUpperCase();
+    if(!cadastro||!crmv)continue;
+    const cadSipeagro=cadastro+'/'+ano;
+    // Store by CRMV number (just the number, we'll match flexibly)
+    const crmvClean=crmv.replace(/\D/g,'');
+    if(crmvClean){
+      sipMap[crmvClean]={nome:nome.toUpperCase(),cadSipeagro,uf,crmvFull:crmv};
+      // Also store with UF prefix for more specific matching
+      sipMap[uf+'_'+crmvClean]={nome:nome.toUpperCase(),cadSipeagro,uf,crmvFull:crmv};
+    }
+    parsed++;
+  }
+  sipLog('Base SIPEAGRO: '+parsed+' veterinários carregados','ok');
+  
+  // Cross-reference with existing prescribers
+  const prescs=ldP();
+  let matched=0,updated=0,already=0;
+  const prescEntries=Object.entries(prescs);
+  
+  for(const[nome,p]of prescEntries){
+    if(!p.crmv)continue;
+    const crmvClean=p.crmv.replace(/\D/g,'');
+    if(!crmvClean)continue;
+    const uf=(p.uf||'GO').toUpperCase();
+    
+    // Try exact match with UF first, then just CRMV number
+    const match=sipMap[uf+'_'+crmvClean]||sipMap[crmvClean];
+    if(match){
+      matched++;
+      if(p.cadMapa){
+        already++;
+      } else {
+        p.cadMapa=match.cadSipeagro;
+        updated++;
+        sipLog('  ✓ '+nome+' (CRMV '+crmvClean+') → SIPEAGRO '+match.cadSipeagro+' ('+match.nome+')','ok');
+      }
+    }
+  }
+  svP(prescs);
+  
+  // Also try to match and enrich movements directly
+  const allMov=ldM();
+  let movEnriched=0;
+  for(const sn of Object.keys(allMov)){
+    const sm=allMov[sn];if(!sm||!sm.lancamentos)continue;
+    for(const l of sm.lancamentos){
+      if(l.tipo!=='saida'||l.cadMapa)continue;
+      const crmvClean=(l.crmvNr||'').replace(/\D/g,'');
+      if(!crmvClean)continue;
+      const uf=(l.crmvUf||'GO').toUpperCase();
+      const match=sipMap[uf+'_'+crmvClean]||sipMap[crmvClean];
+      if(match){l.cadMapa=match.cadSipeagro;movEnriched++;}
+    }
+  }
+  if(movEnriched>0)svM(allMov);
+  
+  sipLog('','ok');
+  sipLog('Resultado: '+matched+' prescritores encontrados na base','ok');
+  sipLog('  → '+updated+' cadastros SIPEAGRO preenchidos (novos)','ok');
+  sipLog('  → '+already+' já tinham SIPEAGRO (mantidos)','ok');
+  sipLog('  → '+(prescEntries.filter(([,p])=>p.crmv&&!sipMap[(p.uf||'GO').toUpperCase()+'_'+p.crmv.replace(/\D/g,'')]&&!sipMap[p.crmv.replace(/\D/g,'')]).length)+' prescritores NÃO encontrados na base','warn');
+  if(movEnriched>0)sipLog('  → '+movEnriched+' movimentos enriquecidos com cadastro MAPA','ok');
+  
+  // Show unmatched prescribers
+  for(const[nome,p]of prescEntries){
+    if(!p.crmv)continue;
+    const crmvClean=p.crmv.replace(/\D/g,'');
+    const uf=(p.uf||'GO').toUpperCase();
+    if(!sipMap[uf+'_'+crmvClean]&&!sipMap[crmvClean]){
+      sipLog('  ✗ '+nome+' (CRMV-'+uf+' '+crmvClean+') — não encontrado','warn');
+    }
+  }
+  
+  renderMov();
+}
+
 // ═══ EXPORTAR XLSX PARA MAPA (gov.br) ═══
 function mapaLog(m,t){const b=document.getElementById('lb-mapa');b.style.display='block';const l=document.createElement('div');if(t)l.className='l'+t[0];l.textContent=m;b.appendChild(l);b.scrollTop=b.scrollHeight;}
 
@@ -1002,43 +1114,125 @@ function exportMapa(){
   const ano=parseInt(document.getElementById('mapa-ano').value)||new Date().getFullYear();
   const sem=parseInt(document.getElementById('mapa-sem').value)||1;
   const dtIni=new Date(ano,sem===1?0:6,1);
-  const dtFim=new Date(ano,sem===1?6:12,0);
+  const dtFim=new Date(ano,sem===1?6:12,0);// last day of semester
   document.getElementById('lb-mapa').innerHTML='';document.getElementById('lb-mapa').style.display='none';
-  const allMov=ldM();const subs=ldSubs();
-  const estoqueInicial=[],entradas=[],saidas=[];let warnings=0;
+  
+  const allMov=ldM();
+  const subs=ldSubs();
+  
+  // Collect data across all substances
+  const estoqueInicial=[];
+  const entradas=[];
+  const saidas=[];
+  let warnings=0;
+  
   for(const s of subs){
-    const sm=allMov[s.n];if(!sm)continue;
+    const sm=allMov[s.n];
+    if(!sm)continue;
+    
+    // Estoque Inicial (convert g → kg)
     const ei=sm.estoqueInicial||0;
-    if(ei>0||sm.lancamentos.length>0)estoqueInicial.push({substancia:s.n,qtdKg:ei/1000});
+    if(ei>0||sm.lancamentos.length>0){
+      estoqueInicial.push({substancia:s.n,qtdKg:ei/1000});
+    }
+    
+    // Filter lançamentos by semester period
     for(const l of(sm.lancamentos||[])){
-      const ld=l.data?new Date(l.data):null;if(!ld||ld<dtIni||ld>dtFim)continue;
+      const ld=l.data?new Date(l.data):null;
+      if(!ld)continue;
+      if(ld<dtIni||ld>dtFim)continue;
+      
       if(l.tipo==='entrada'){
-        entradas.push({substancia:s.n,tipoEntrada:'Aquisição',qtdKg:l.qtd/1000,identificacao:l.cnpjFornecedor||'',nome:l.fornecedor||l.descricao||'',nf:l.nfNumero||'',data:l.data||''});
+        const cnpj=l.cnpjFornecedor||'';
+        const fornNome=l.fornecedor||l.descricao||'';
+        const nf=l.nfNumero||'';
+        if(!cnpj&&!fornNome)warnings++;
+        entradas.push({
+          substancia:s.n,
+          tipoEntrada:'Aquisição',
+          qtdKg:l.qtd/1000,
+          identificacao:cnpj,
+          nome:fornNome,
+          nf:nf,
+          data:l.data||''
+        });
       } else if(l.tipo==='saida'){
-        const cpf=l.cpf||getC(l.tutor)||'';const cadM=l.cadMapa||getLancCadMapa(l)||'';
-        if(!cpf){warnings++;mapaLog('⚠ Sem CPF: '+(l.tutor||'')+'(OM:'+l.nrOm+') — '+s.n,'warn');}
-        if(!cadM){warnings++;mapaLog('⚠ Sem Cad.MAPA: '+(l.prescritor||'')+'(OM:'+l.nrOm+') — '+s.n,'warn');}
-        saidas.push({substancia:s.n,tipoSaida:'Venda',qtdKg:l.qtd/1000,identificacao:normCPF(cpf),nome:l.tutor||'',prescritor:l.prescritor||'',cadMapa:cadM,nrOM:l.nrOm||'',nf:l.nrDoc||'',data:l.data||''});
+        const cpf=l.cpf||getC(l.tutor)||'';
+        const tutor=l.tutor||'';
+        const prescritor=l.prescritor||'';
+        const cadMapa=l.cadMapa||getLancCadMapa(l)||'';
+        const om=l.nrOm||'';
+        const nfDoc=l.nrDoc||'';
+        if(!cpf){warnings++;mapaLog('⚠ Saída sem CPF: '+tutor+' (OM:'+om+') — '+s.n,'warn');}
+        if(!cadMapa){warnings++;mapaLog('⚠ Saída sem Cadastro MAPA: prescritor '+prescritor+' (OM:'+om+') — '+s.n,'warn');}
+        saidas.push({
+          substancia:s.n,
+          tipoSaida:'Venda',
+          qtdKg:l.qtd/1000,
+          identificacao:normCPF(cpf),
+          nome:tutor,
+          prescritor:prescritor,
+          cadMapa:cadMapa,
+          nrOM:om,
+          nf:nfDoc,
+          data:l.data||''
+        });
       } else if(l.tipo==='perda'){
-        saidas.push({substancia:s.n,tipoSaida:'Perda',qtdKg:l.qtd/1000,identificacao:'',nome:'',prescritor:'',cadMapa:'',nrOM:'',nf:'',data:l.data||''});
+        saidas.push({
+          substancia:s.n,
+          tipoSaida:'Perda',
+          qtdKg:l.qtd/1000,
+          identificacao:'',
+          nome:'',
+          prescritor:'',
+          cadMapa:'',
+          nrOM:'',
+          nf:'',
+          data:l.data||''
+        });
       }
     }
   }
-  if(!estoqueInicial.length&&!entradas.length&&!saidas.length){alert('Nenhum dado para o período.');return;}
+  
+  if(!estoqueInicial.length&&!entradas.length&&!saidas.length){
+    alert('Nenhum dado encontrado para o período selecionado.');return;
+  }
+  
+  // Build XLSX workbook
   const wb=XLSX.utils.book_new();
-  const eiD=[['Substância','Quantidade']];estoqueInicial.forEach(e=>eiD.push([e.substancia,e.qtdKg]));
-  const ws1=XLSX.utils.aoa_to_sheet(eiD);ws1['!cols']=[{wch:22},{wch:14}];XLSX.utils.book_append_sheet(wb,ws1,'Estoque inicial');
-  const enD=[['Substância','Tipo de entrada','Quantidade','Identificação','Nome','Número da nota fiscal','Data da nota fiscal']];entradas.forEach(e=>enD.push([e.substancia,e.tipoEntrada,e.qtdKg,e.identificacao,e.nome,e.nf,e.data]));
-  const ws2=XLSX.utils.aoa_to_sheet(enD);ws2['!cols']=[{wch:18},{wch:16},{wch:12},{wch:22},{wch:30},{wch:20},{wch:16}];XLSX.utils.book_append_sheet(wb,ws2,'Entradas');
-  const saD=[['Substância','Tipo de saída','Quantidade','Identificação','Nome','Prescritor','Cadastro do prescritor no MAPA','Número da ordem de manipulação','Número da nota fiscal','Data da nota fiscal']];
-  saidas.forEach(s=>saD.push([s.substancia,s.tipoSaida,s.qtdKg,s.identificacao,s.nome,s.prescritor,s.cadMapa,s.nrOM,s.nf,s.data]));
-  const ws3=XLSX.utils.aoa_to_sheet(saD);ws3['!cols']=[{wch:18},{wch:18},{wch:12},{wch:18},{wch:28},{wch:28},{wch:24},{wch:18},{wch:20},{wch:16}];XLSX.utils.book_append_sheet(wb,ws3,'Saídas');
-  const cfg=ldCfg();const nomeArq='Relatorio_MAPA_'+ano+'_'+sem+'sem'+(cfg.fantasia?'_'+cfg.fantasia.replace(/\s+/g,'_').slice(0,20):'')+'.xlsx';
+  
+  // Sheet 1: Estoque inicial
+  const eiData=[['Substância','Quantidade']];
+  estoqueInicial.forEach(e=>eiData.push([e.substancia,e.qtdKg]));
+  const ws1=XLSX.utils.aoa_to_sheet(eiData);
+  ws1['!cols']=[{wch:22},{wch:14}];
+  XLSX.utils.book_append_sheet(wb,ws1,'Estoque inicial');
+  
+  // Sheet 2: Entradas
+  const enData=[['Substância','Tipo de entrada','Quantidade','Identificação','Nome','Número da nota fiscal','Data da nota fiscal']];
+  entradas.forEach(e=>enData.push([e.substancia,e.tipoEntrada,e.qtdKg,e.identificacao,e.nome,e.nf,e.data]));
+  const ws2=XLSX.utils.aoa_to_sheet(enData);
+  ws2['!cols']=[{wch:18},{wch:16},{wch:12},{wch:22},{wch:30},{wch:20},{wch:16}];
+  XLSX.utils.book_append_sheet(wb,ws2,'Entradas');
+  
+  // Sheet 3: Saídas
+  const saData=[['Substância','Tipo de saída','Quantidade','Identificação','Nome','Prescritor','Cadastro do prescritor no MAPA','Número da ordem de manipulação','Número da nota fiscal','Data da nota fiscal']];
+  saidas.forEach(s=>saData.push([s.substancia,s.tipoSaida,s.qtdKg,s.identificacao,s.nome,s.prescritor,s.cadMapa,s.nrOM,s.nf,s.data]));
+  const ws3=XLSX.utils.aoa_to_sheet(saData);
+  ws3['!cols']=[{wch:18},{wch:18},{wch:12},{wch:18},{wch:28},{wch:28},{wch:24},{wch:18},{wch:20},{wch:16}];
+  XLSX.utils.book_append_sheet(wb,ws3,'Saídas');
+  
+  // Download
+  const cfg=ldCfg();
+  const nomeArq='Relatorio_MAPA_'+ano+'_'+sem+'sem'+(cfg.fantasia?'_'+cfg.fantasia.replace(/\s+/g,'_').slice(0,20):'')+'.xlsx';
   XLSX.writeFile(wb,nomeArq);
-  mapaLog('✓ '+nomeArq+' gerado','ok');
-  mapaLog('  EI: '+estoqueInicial.length+' substâncias | Ent: '+entradas.length+' | Saí: '+saidas.filter(s=>s.tipoSaida==='Venda').length+' vendas + '+saidas.filter(s=>s.tipoSaida==='Perda').length+' perdas','ok');
-  if(warnings>0)mapaLog('⚠ '+warnings+' alertas — revise antes de enviar','warn');
-  else mapaLog('✓ Pronto para upload no sistema gov.br','ok');
+  
+  mapaLog('✓ Arquivo gerado: '+nomeArq,'ok');
+  mapaLog('  Estoque inicial: '+estoqueInicial.length+' substâncias','ok');
+  mapaLog('  Entradas: '+entradas.length+' registros','ok');
+  mapaLog('  Saídas: '+saidas.length+' registros ('+saidas.filter(s=>s.tipoSaida==='Venda').length+' vendas, '+saidas.filter(s=>s.tipoSaida==='Perda').length+' perdas)','ok');
+  if(warnings>0)mapaLog('⚠ '+warnings+' alertas — revise os campos em branco antes de enviar ao sistema MAPA','warn');
+  else mapaLog('✓ Nenhum alerta. Arquivo pronto para upload no sistema gov.br','ok');
 }
 
 // ═══ PDF PARSER — RELATÓRIO MAPA (v5.0) ═══
@@ -1224,7 +1418,7 @@ function pdfExtractDataRows(rows,colBounds){
   const results=[];
   let pendingRow=null;
   // Get RT name from config for footer filtering
-  const rtName=up(ldCfg().rtNome||'PAULO EDSON FERNANDES');
+  const rtName=up(ldCfg().rtNome||'');
   const rtParts=rtName.split(/\s+/).filter(p=>p.length>2);// significant name parts
   
   for(const row of rows){
@@ -1350,7 +1544,7 @@ function pdfMergeContinuation(rec,row,cols){
   const allText=row.items.map(it=>it.str).join(' ').toUpperCase();
   // Skip footer-like rows entirely
   if(allText.includes('PÁGINA')||allText.includes('ASSINATURA')||/CRF[\s:]*\d+/.test(allText))return;
-  const rtName=up(ldCfg().rtNome||'PAULO EDSON FERNANDES');
+  const rtName=up(ldCfg().rtNome||'');
   const rtParts=rtName.split(/\s+/).filter(p=>p.length>2);
   if(pdfRowIsRT(allText,rtName,rtParts))return;
   
@@ -1506,14 +1700,22 @@ try{
 setupDZ('z-m','f-m','fn-m','m');
 setupDZ('z-c','f-c','fn-c','c');
 setupPdfDZ();
+setupSipDZ();
 document.getElementById('mv-sub').innerHTML=SUB.map(s=>'<option value="'+s.n+'">'+s.n+' ('+s.l+')</option>').join('');
 var ySel=document.getElementById('mv-ano');var cY=new Date().getFullYear();for(var y=cY-2;y<=cY+1;y++){var o=document.createElement('option');o.value=y;o.textContent=y;if(y===cY)o.selected=true;ySel.appendChild(o);}
 document.getElementById('mv-sem').value=new Date().getMonth()<6?'1':'2';
+// MAPA export defaults
 document.getElementById('mapa-ano').value=new Date().getFullYear();
 document.getElementById('mapa-sem').value=new Date().getMonth()<6?'1':'2';
-document.getElementById('inp-estab').value=ldCfg().fantasia||'R S O MANIPULACAO ANIMAL';
-chkBkp();setTimeout(function(){try{renderMov();}catch(e){console.error('renderMov init:',e);}},100);
-console.log('Controlados v5.0 inicializado com '+SUB.length+' substâncias');
+document.getElementById('inp-estab').value=ldCfg().fantasia||'';
+chkBkp();
+// Update header with establishment name
+const _cfg=ldCfg();
+const _hdrE=document.getElementById('hdr-estab');
+if(_cfg.fantasia)_hdrE.textContent=_cfg.fantasia;
+else _hdrE.textContent='Fórmula Animal · Escrituração Digital';
+setTimeout(function(){try{renderMov();}catch(e){console.error('renderMov init:',e);}},100);
+console.log('Controle Especial v5.0 inicializado com '+SUB.length+' substâncias');
 }catch(e){console.error('INIT ERROR:',e);}
 // Auto-migrar dados v3 se necessário
 try{(function(){
