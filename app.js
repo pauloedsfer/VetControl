@@ -1018,6 +1018,7 @@ function fetchSipeagroOnline(formato){
     
     // Cross-reference with prescribers
     const prescs=ldP();let matched=0,updated=0,already=0;
+    const renames=[];// [{oldName, newName}]
     for(const[nome,p]of Object.entries(prescs)){
       if(!p.crmv)continue;
       const ck=p.crmv.replace(/\D/g,'').replace(/^0+/,'')||'0';
@@ -1034,15 +1035,39 @@ function fetchSipeagroOnline(formato){
           p.cadMapa=mvNum;updated++;
           sipLog('  ✓ '+nome+' → '+mvNum+(mvNome?' ('+mvNome+')':''),'ok');
         }
+        // Check name mismatch
+        if(mvNome){
+          const nomeNorm=nome.trim().toUpperCase().replace(/\s+/g,' ');
+          const sipNorm=mvNome.trim().toUpperCase().replace(/\s+/g,' ');
+          if(nomeNorm!==sipNorm && sipNorm.length>3){
+            renames.push({oldName:nome, newName:mvNome.toUpperCase().trim(), data:p});
+          }
+        }
       }
+    }
+    
+    // Apply name renames
+    let renamed=0;
+    for(const r of renames){
+      if(r.oldName===r.newName)continue;
+      if(prescs[r.newName]){
+        sipLog('  ⚠ Nome SIPEAGRO "'+r.newName+'" já existe como prescritor, mantendo "'+r.oldName+'"','warn');
+        continue;
+      }
+      prescs[r.newName]=prescs[r.oldName];
+      delete prescs[r.oldName];
+      renamed++;
+      sipLog('  📝 '+r.oldName+' → '+r.newName,'ok');
     }
     svP(prescs);
     
-    // Enrich movements
-    const allMov=ldM();let me=0;
+    // Enrich movements (cadMapa + name updates)
+    const allMov=ldM();let me=0;let mr=0;
+    const renameMap=new Map(renames.filter(r=>r.oldName!==r.newName&&!ldP()[r.oldName]).map(r=>[r.oldName,r.newName]));
     for(const sn of Object.keys(allMov)){const sm=allMov[sn];if(!sm)continue;
       for(const l of(sm.lancamentos||[])){
         if(l.tipo!=='saida')continue;
+        // Update cadMapa
         const ck=(l.crmvNr||'').replace(/\D/g,'').replace(/^0+/,'')||'0';
         const match=data[ck];
         if(match){
@@ -1052,12 +1077,19 @@ function fetchSipeagroOnline(formato){
             l.cadMapa=mvNum;me++;
           }
         }
+        // Update prescriber name in movements
+        if(l.prescritor&&renameMap.has(l.prescritor)){
+          l.prescritor=renameMap.get(l.prescritor);mr++;
+        }
       }
     }
-    if(me>0)svM(allMov);
+    if(me>0||mr>0)svM(allMov);
     
     sipLog('','ok');
-    sipLog('Resultado: '+matched+' encontrados, '+updated+' atualizados, '+already+' já OK'+(me?' | '+me+' movimentos':''),'ok');
+    let res='Resultado: '+matched+' encontrados, '+updated+' atualizados, '+already+' já OK';
+    if(renamed)res+=' | '+renamed+' nomes corrigidos';
+    if(me)res+=' | '+me+' movimentos';
+    sipLog(res,'ok');
     
     // Show unmatched
     for(const[nome,p]of Object.entries(prescs)){
