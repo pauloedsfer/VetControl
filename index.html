@@ -234,10 +234,17 @@ footer{margin-top:40px;text-align:center;font-family:var(--mono);font-size:.68re
 <div class="lb" id="lb-pdf" style="display:none"></div>
 </div>
 
-<div class="sl" style="margin-top:24px">Opcional · Importar Base SIPEAGRO (veterinários)</div>
+<div class="sl" style="margin-top:24px">Opcional · Base SIPEAGRO (veterinários)</div>
 <div class="cd">
-<div style="font-family:var(--mono);font-size:.64rem;color:var(--mt);margin-bottom:8px;line-height:1.5">Exporte a planilha do painel MAPA (<a href="https://mapa-indicadores.agricultura.gov.br/publico/single/?appid=95a12fdb-9e5a-4faa-ac26-38a2244c6a39&sheet=1a688491-6640-492f-ae83-f8fedb3d0aaf" target="_blank" style="color:var(--ac)">Consulta SIPEAGRO</a>). Filtre por UF, clique com botão direito na tabela → Exportar. O sistema cruza o Nº CRMV com os prescritores já cadastrados e preenche automaticamente o Cadastro MAPA (SIPEAGRO).</div>
-<div class="dz" id="z-sip"><input type="file" id="f-sip" accept=".xls,.xlsx"/><span class="di">🏥</span><span class="dl">Base SIPEAGRO (XLSX)</span><span class="dh">Médicos Veterinários Cadastrados</span><div class="df" id="fn-sip"></div></div>
+<div style="font-family:var(--mono);font-size:.64rem;color:var(--mt);margin-bottom:8px;line-height:1.5">Atualiza o cadastro MAPA dos prescritores automaticamente. Busca online por UF ou importa planilha exportada do painel MAPA.</div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-bottom:10px">
+<div class="fd" style="margin-bottom:0"><label>UF</label><select id="sip-uf" style="width:70px"><option>AC</option><option>AL</option><option>AM</option><option>AP</option><option>BA</option><option>CE</option><option>DF</option><option>ES</option><option selected>GO</option><option>MA</option><option>MG</option><option>MS</option><option>MT</option><option>PA</option><option>PB</option><option>PE</option><option>PI</option><option>PR</option><option>RJ</option><option>RN</option><option>RO</option><option>RR</option><option>RS</option><option>SC</option><option>SE</option><option>SP</option><option>TO</option></select></div>
+<button class="bg" style="padding:8px 16px;width:auto;font-size:.72rem" onclick="fetchSipeagroOnline()">🌐 Buscar SIPEAGRO Online</button>
+<button class="bs bsm" onclick="revertSipeagro()" style="font-size:.66rem">↩ Reverter</button>
+<button class="bs bsm" onclick="showSipeagroStatus()" style="font-size:.66rem">📋 Status</button>
+</div>
+<div style="font-family:var(--mono);font-size:.6rem;color:var(--mt);margin-bottom:6px">Ou importe planilha manualmente:</div>
+<div class="dz" id="z-sip"><input type="file" id="f-sip" accept=".xls,.xlsx,.csv"/><span class="di">🏥</span><span class="dl">Base SIPEAGRO (XLSX/CSV)</span><span class="dh">Médicos Veterinários Cadastrados</span><div class="df" id="fn-sip"></div></div>
 <button class="bp" id="btn-sip" disabled style="margin-top:10px" onclick="processSipeagro()">Cruzar com Prescritores</button>
 <div class="lb" id="lb-sip" style="display:none;margin-top:8px"></div>
 </div>

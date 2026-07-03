@@ -995,7 +995,81 @@ function migrateV3toV4(hist, cpfs, enderecos, prescritores){
 }
 
 // ═══ IMPORTAR BASE SIPEAGRO ═══
+const SIPEAGRO_BASE_URL='https://pauloedsfer.github.io/sipeagro';
 let sipFileData=null;
+
+function fetchSipeagroOnline(){
+  const uf=document.getElementById('sip-uf').value;
+  const url=SIPEAGRO_BASE_URL+'/'+uf+'.json';
+  document.getElementById('lb-sip').innerHTML='';document.getElementById('lb-sip').style.display='none';
+  sipLog('Buscando base SIPEAGRO para '+uf+'...','ok');
+  
+  fetch(url).then(r=>{
+    if(!r.ok)throw new Error('HTTP '+r.status+' — verifique se a base está hospedada em '+SIPEAGRO_BASE_URL);
+    return r.json();
+  }).then(data=>{
+    // data = {crmv: [mvNumber, nome], ...}
+    const entries=Object.entries(data);
+    sipLog('Base '+uf+': '+entries.length+' veterinários carregados','ok');
+    
+    // Cross-reference with prescribers
+    const prescs=ldP();let matched=0,updated=0,already=0;
+    for(const[nome,p]of Object.entries(prescs)){
+      if(!p.crmv)continue;
+      const ck=p.crmv.replace(/\D/g,'').replace(/^0+/,'')||'0';
+      const match=data[ck];
+      if(match){
+        const mvNum=Array.isArray(match)?match[0]:match;
+        const mvNome=Array.isArray(match)?match[1]:'';
+        matched++;
+        if(p.cadMapa&&p.cadMapa===mvNum){already++;}
+        else if(p.cadMapa&&p.cadMapa!==mvNum){
+          p.cadMapaAntigo=p.cadMapa;p.cadMapa=mvNum;updated++;
+          sipLog('  ↑ '+nome+': '+p.cadMapaAntigo+' → '+mvNum+(mvNome?' ('+mvNome+')':''),'ok');
+        } else if(!p.cadMapa){
+          p.cadMapa=mvNum;updated++;
+          sipLog('  ✓ '+nome+' → '+mvNum+(mvNome?' ('+mvNome+')':''),'ok');
+        }
+      }
+    }
+    svP(prescs);
+    
+    // Enrich movements
+    const allMov=ldM();let me=0;
+    for(const sn of Object.keys(allMov)){const sm=allMov[sn];if(!sm)continue;
+      for(const l of(sm.lancamentos||[])){
+        if(l.tipo!=='saida')continue;
+        const ck=(l.crmvNr||'').replace(/\D/g,'').replace(/^0+/,'')||'0';
+        const match=data[ck];
+        if(match){
+          const mvNum=Array.isArray(match)?match[0]:match;
+          if(!l.cadMapa||l.cadMapa!==mvNum){
+            if(l.cadMapa)l.cadMapaAntigo=l.cadMapa;
+            l.cadMapa=mvNum;me++;
+          }
+        }
+      }
+    }
+    if(me>0)svM(allMov);
+    
+    sipLog('','ok');
+    sipLog('Resultado: '+matched+' encontrados, '+updated+' atualizados, '+already+' já OK'+(me?' | '+me+' movimentos':''),'ok');
+    
+    // Show unmatched
+    for(const[nome,p]of Object.entries(prescs)){
+      if(!p.crmv)continue;const ck=p.crmv.replace(/\D/g,'').replace(/^0+/,'')||'0';
+      if(!data[ck])sipLog('  ✗ '+nome+' (CRMV '+p.crmv+') — não encontrado em '+uf,'warn');
+    }
+    
+    // Save last update date
+    const cfg=ldCfg();cfg.sipeagroLastUpdate=new Date().toISOString().slice(0,10);cfg.sipeagroUF=uf;svCfg(cfg);
+    sipLog('Atualizado em: '+cfg.sipeagroLastUpdate,'ok');
+    renderMov();
+  }).catch(err=>{
+    sipLog('✗ Erro ao buscar: '+err.message,'warn');
+    sipLog('Configure a URL base em SIPEAGRO_BASE_URL ou importe manualmente via planilha.','warn');
+  });
+}
 function setupSipDZ(){
   const z=document.getElementById('z-sip'),inp=document.getElementById('f-sip'),fn=document.getElementById('fn-sip');
   if(!z||!inp)return;
@@ -1008,8 +1082,20 @@ function readSipFile(file,fn,z){
   fn.textContent='📎 '+file.name;
   const r=new FileReader();
   r.onload=e=>{try{
-    const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
-    sipFileData=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+    if(file.name.toLowerCase().endsWith('.csv')){
+      // Parse CSV
+      const text=new TextDecoder('utf-8').decode(new Uint8Array(e.target.result));
+      const lines=text.split('\n').filter(l=>l.trim());
+      const headers=lines[0].replace(/^\ufeff/,'').split(',').map(h=>h.replace(/"/g,'').trim());
+      sipFileData=lines.slice(1).map(line=>{
+        const vals=line.match(/(".*?"|[^,]+)/g)||[];
+        const obj={};headers.forEach((h,i)=>{obj[h]=vals[i]?vals[i].replace(/"/g,'').trim():'';});
+        return obj;
+      });
+    } else {
+      const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
+      sipFileData=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+    }
     fn.textContent='✓ '+file.name+' ('+sipFileData.length+' registros)';
     z.classList.add('rdy');
     document.getElementById('btn-sip').disabled=false;
@@ -1022,28 +1108,53 @@ function processSipeagro(){
   if(!sipFileData||!sipFileData.length){alert('Carregue o arquivo SIPEAGRO primeiro.');return;}
   document.getElementById('lb-sip').innerHTML='';document.getElementById('lb-sip').style.display='none';
   
-  // Build CRMV→SIPEAGRO map from the XLSX
-  // Columns: "Nº CADASTRO MV", "ANO", "NOME DO MÉDICO VETERINÁRIO", "Nº CRMV", "UF"
-  const sipMap={};// key: "CRMV-UF NUMERO" → {nome, cadSipeagro}
-  let parsed=0;
+  // Auto-detect table format by column names
+  const cols=Object.keys(sipFileData[0]);
+  const colStr=cols.join('|').toUpperCase();
+  
+  // Old table: "Nº CADASTRO MV", "ANO", "NOME DO MÉDICO VETERINÁRIO", "Nº CRMV", "UF"
+  // New table: detect by different column patterns
+  const isOldFormat=colStr.includes('CADASTRO MV')&&colStr.includes('ANO');
+  const isNewFormat=!isOldFormat;// treat anything else as new format
+  
+  sipLog('Formato detectado: '+(isOldFormat?'Tabela antiga (CADASTRO MV/ANO)':'Tabela nova'),'ok');
+  sipLog('Colunas: '+cols.join(', '),'ok');
+  
+  // Build CRMV→SIPEAGRO map
+  const sipMap={};let parsed=0;
   for(const row of sipFileData){
-    const cadastro=String(row['Nº CADASTRO MV']||row['N° CADASTRO MV']||'').trim();
-    const ano=String(row['ANO']||'').trim();
-    const nome=String(row['NOME DO MÉDICO VETERINÁRIO']||row['NOME']||'').trim();
-    const crmv=String(row['Nº CRMV']||row['N° CRMV']||row['CRMV']||'').trim();
-    const uf=String(row['UF']||'').trim().toUpperCase();
+    let cadastro='',ano='',nome='',crmv='',uf='';
+    
+    if(isOldFormat){
+      cadastro=String(row['Nº CADASTRO MV']||row['N° CADASTRO MV']||'').trim();
+      ano=String(row['ANO']||'').trim();
+      nome=String(row['NOME DO MÉDICO VETERINÁRIO']||row['NOME']||'').trim();
+      crmv=String(row['Nº CRMV']||row['N° CRMV']||row['CRMV']||'').trim();
+      uf=String(row['UF']||'').trim().toUpperCase();
+    } else {
+      // New format: try to find columns by partial match
+      for(const c of cols){
+        const cu=c.toUpperCase();
+        if(cu.includes('CADASTRO')&&!cu.includes('ANO')&&!cadastro)cadastro=String(row[c]||'').trim();
+        else if(cu.includes('ANO')&&!ano)ano=String(row[c]||'').trim();
+        else if((cu.includes('NOME')||cu.includes('VETERINÁR'))&&!nome)nome=String(row[c]||'').trim();
+        else if(cu.includes('CRMV')&&!crmv)crmv=String(row[c]||'').trim();
+        else if(cu==='UF'&&!uf)uf=String(row[c]||'').trim().toUpperCase();
+      }
+      // If cadastro already contains slash (NNNNN/YYYY), split it
+      if(cadastro.includes('/')){const parts=cadastro.split('/');cadastro=parts[0];if(!ano)ano=parts[1];}
+    }
+    
     if(!cadastro||!crmv)continue;
-    const cadSipeagro=cadastro+'/'+ano;
-    // Store by CRMV number (just the number, we'll match flexibly)
+    const cadSipeagro=ano?cadastro+'/'+ano:cadastro;
     const crmvClean=crmv.replace(/\D/g,'');
     if(crmvClean){
-      sipMap[crmvClean]={nome:nome.toUpperCase(),cadSipeagro,uf,crmvFull:crmv};
-      // Also store with UF prefix for more specific matching
-      sipMap[uf+'_'+crmvClean]={nome:nome.toUpperCase(),cadSipeagro,uf,crmvFull:crmv};
+      sipMap[crmvClean]={nome:nome.toUpperCase(),cadSipeagro,uf,crmvFull:crmv,isNew:isNewFormat};
+      sipMap[(uf||'GO')+'_'+crmvClean]={nome:nome.toUpperCase(),cadSipeagro,uf,crmvFull:crmv,isNew:isNewFormat};
     }
     parsed++;
   }
-  sipLog('Base SIPEAGRO: '+parsed+' veterinários carregados','ok');
+  sipLog('Base carregada: '+parsed+' veterinários','ok');
   
   // Cross-reference with existing prescribers
   const prescs=ldP();
@@ -1055,56 +1166,83 @@ function processSipeagro(){
     const crmvClean=p.crmv.replace(/\D/g,'');
     if(!crmvClean)continue;
     const uf=(p.uf||'GO').toUpperCase();
-    
-    // Try exact match with UF first, then just CRMV number
     const match=sipMap[uf+'_'+crmvClean]||sipMap[crmvClean];
     if(match){
       matched++;
-      if(p.cadMapa){
-        already++;
+      if(isNewFormat){
+        // New table: store as new number, keep old as backup
+        if(p.cadMapa&&p.cadMapa!==match.cadSipeagro){
+          p.cadMapaAntigo=p.cadMapa;// backup old
+          p.cadMapa=match.cadSipeagro;// replace with new
+          updated++;
+          sipLog('  ↑ '+nome+' (CRMV '+crmvClean+'): '+p.cadMapaAntigo+' → '+match.cadSipeagro+' ('+match.nome+')','ok');
+        } else if(!p.cadMapa){
+          p.cadMapa=match.cadSipeagro;
+          updated++;
+          sipLog('  ✓ '+nome+' (CRMV '+crmvClean+') → '+match.cadSipeagro+' ('+match.nome+')','ok');
+        } else {already++;}
       } else {
-        p.cadMapa=match.cadSipeagro;
-        updated++;
-        sipLog('  ✓ '+nome+' (CRMV '+crmvClean+') → SIPEAGRO '+match.cadSipeagro+' ('+match.nome+')','ok');
+        // Old table: only fill if empty
+        if(!p.cadMapa){
+          p.cadMapa=match.cadSipeagro;updated++;
+          sipLog('  ✓ '+nome+' (CRMV '+crmvClean+') → '+match.cadSipeagro+' ('+match.nome+')','ok');
+        } else {already++;}
       }
     }
   }
   svP(prescs);
   
-  // Also try to match and enrich movements directly
-  const allMov=ldM();
-  let movEnriched=0;
-  for(const sn of Object.keys(allMov)){
-    const sm=allMov[sn];if(!sm||!sm.lancamentos)continue;
-    for(const l of sm.lancamentos){
-      if(l.tipo!=='saida'||l.cadMapa)continue;
-      const crmvClean=(l.crmvNr||'').replace(/\D/g,'');
-      if(!crmvClean)continue;
+  // Enrich movements
+  const allMov=ldM();let me=0;
+  for(const sn of Object.keys(allMov)){const sm=allMov[sn];if(!sm)continue;
+    for(const l of(sm.lancamentos||[])){
+      if(l.tipo!=='saida')continue;
+      const ck=(l.crmvNr||'').replace(/\D/g,'');if(!ck)continue;
       const uf=(l.crmvUf||'GO').toUpperCase();
-      const match=sipMap[uf+'_'+crmvClean]||sipMap[crmvClean];
-      if(match){l.cadMapa=match.cadSipeagro;movEnriched++;}
+      const m=sipMap[uf+'_'+ck]||sipMap[ck];
+      if(m){
+        if(!l.cadMapa||isNewFormat){
+          if(l.cadMapa&&l.cadMapa!==m.cadSipeagro)l.cadMapaAntigo=l.cadMapa;
+          l.cadMapa=m.cadSipeagro;me++;
+        }
+      }
     }
   }
-  if(movEnriched>0)svM(allMov);
+  if(me>0)svM(allMov);
   
   sipLog('','ok');
-  sipLog('Resultado: '+matched+' prescritores encontrados na base','ok');
-  sipLog('  → '+updated+' cadastros SIPEAGRO preenchidos (novos)','ok');
-  sipLog('  → '+already+' já tinham SIPEAGRO (mantidos)','ok');
-  sipLog('  → '+(prescEntries.filter(([,p])=>p.crmv&&!sipMap[(p.uf||'GO').toUpperCase()+'_'+p.crmv.replace(/\D/g,'')]&&!sipMap[p.crmv.replace(/\D/g,'')]).length)+' prescritores NÃO encontrados na base','warn');
-  if(movEnriched>0)sipLog('  → '+movEnriched+' movimentos enriquecidos com cadastro MAPA','ok');
+  sipLog('Resultado: '+matched+' encontrados, '+updated+' atualizados, '+already+' já OK'+(me?' | '+me+' movimentos atualizados':''),'ok');
+  if(isNewFormat&&updated>0)sipLog('💡 Números antigos salvos em "cadMapaAntigo". Use ⚙ Config → "Reverter SIPEAGRO" se precisar voltar.','ok');
   
-  // Show unmatched prescribers
+  // Show unmatched
   for(const[nome,p]of prescEntries){
-    if(!p.crmv)continue;
-    const crmvClean=p.crmv.replace(/\D/g,'');
-    const uf=(p.uf||'GO').toUpperCase();
-    if(!sipMap[uf+'_'+crmvClean]&&!sipMap[crmvClean]){
-      sipLog('  ✗ '+nome+' (CRMV-'+uf+' '+crmvClean+') — não encontrado','warn');
-    }
+    if(!p.crmv)continue;const ck=p.crmv.replace(/\D/g,'');const uf=(p.uf||'GO').toUpperCase();
+    if(!sipMap[uf+'_'+ck]&&!sipMap[ck])sipLog('  ✗ '+nome+' (CRMV-'+uf+' '+ck+') — não encontrado','warn');
   }
-  
   renderMov();
+}
+
+function revertSipeagro(){
+  const prescs=ldP();let rev=0;
+  for(const p of Object.values(prescs)){if(p.cadMapaAntigo){const t=p.cadMapa;p.cadMapa=p.cadMapaAntigo;p.cadMapaAntigo=t;rev++;}}
+  if(!rev){alert('Nenhum prescritor tem número antigo salvo.');return;}
+  svP(prescs);
+  const allMov=ldM();let me=0;
+  for(const sn of Object.keys(allMov)){const sm=allMov[sn];if(!sm)continue;
+    for(const l of(sm.lancamentos||[])){if(l.cadMapaAntigo){const t=l.cadMapa;l.cadMapa=l.cadMapaAntigo;l.cadMapaAntigo=t;me++;}}}
+  if(me>0)svM(allMov);
+  alert('Revertidos '+rev+' prescritores'+(me?' e '+me+' movimentos':'')+' para o número antigo.');renderMov();
+}
+function showSipeagroStatus(){
+  document.getElementById('lb-sip').innerHTML='';document.getElementById('lb-sip').style.display='block';
+  const prescs=ldP();let tot=0,com=0,ant=0,sem=0;
+  for(const[n,p]of Object.entries(prescs)){
+    if(!p.crmv)continue;tot++;
+    if(p.cadMapa){com++;sipLog('  ✓ '+n+' — CRMV '+p.crmv+' → '+p.cadMapa+(p.cadMapaAntigo?' (anterior: '+p.cadMapaAntigo+')':''),'ok');}
+    else{sem++;sipLog('  ✗ '+n+' — CRMV '+p.crmv+' → sem MAPA','warn');}
+    if(p.cadMapaAntigo)ant++;
+  }
+  sipLog(tot+' prescritores | '+com+' com MAPA | '+sem+' sem | '+ant+' com nº anterior salvo','ok');
 }
 
 // ═══ EXPORTAR XLSX PARA MAPA (gov.br) ═══
@@ -1114,7 +1252,7 @@ function exportMapa(){
   const ano=parseInt(document.getElementById('mapa-ano').value)||new Date().getFullYear();
   const sem=parseInt(document.getElementById('mapa-sem').value)||1;
   const dtIni=new Date(ano,sem===1?0:6,1);
-  const dtFim=new Date(ano,sem===1?6:12,0);// last day of semester
+  const dtFim=new Date(ano,sem===1?6:12,0);
   document.getElementById('lb-mapa').innerHTML='';document.getElementById('lb-mapa').style.display='none';
   
   const allMov=ldM();
