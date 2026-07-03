@@ -1051,13 +1051,21 @@ function fetchSipeagroOnline(formato){
     for(const r of renames){
       if(r.oldName===r.newName)continue;
       if(prescs[r.newName]){
-        sipLog('  ⚠ Nome SIPEAGRO "'+r.newName+'" já existe como prescritor, mantendo "'+r.oldName+'"','warn');
-        continue;
+        // Merge: the full name already exists — transfer cadMapa from truncated to full, delete truncated
+        const dst=prescs[r.newName];
+        const src=prescs[r.oldName];
+        if(src.cadMapa&&!dst.cadMapa) dst.cadMapa=src.cadMapa;
+        if(src.cadMapaAntigo&&!dst.cadMapaAntigo) dst.cadMapaAntigo=src.cadMapaAntigo;
+        if(src.crmv&&!dst.crmv) dst.crmv=src.crmv;
+        delete prescs[r.oldName];
+        renamed++;
+        sipLog('  📝 '+r.oldName+' → mesclado com '+r.newName,'ok');
+      } else {
+        prescs[r.newName]=prescs[r.oldName];
+        delete prescs[r.oldName];
+        renamed++;
+        sipLog('  📝 '+r.oldName+' → '+r.newName,'ok');
       }
-      prescs[r.newName]=prescs[r.oldName];
-      delete prescs[r.oldName];
-      renamed++;
-      sipLog('  📝 '+r.oldName+' → '+r.newName,'ok');
     }
     svP(prescs);
     
