@@ -995,22 +995,26 @@ function migrateV3toV4(hist, cpfs, enderecos, prescritores){
 }
 
 // ═══ IMPORTAR BASE SIPEAGRO ═══
-const SIPEAGRO_BASE_URL='https://pauloedsfer.github.io/sipeagro';
+const SIPEAGRO_NOVO_URL='https://raw.githubusercontent.com/pauloedsfer/sipeagro/main';
+const SIPEAGRO_ANTIGO_URL='https://raw.githubusercontent.com/pauloedsfer/sipeagro-antigo/main';
 let sipFileData=null;
 
-function fetchSipeagroOnline(){
+function fetchSipeagroOnline(formato){
   const uf=document.getElementById('sip-uf').value;
-  const url=SIPEAGRO_BASE_URL+'/'+uf+'.json';
+  const isNovo=formato==='novo';
+  const baseUrl=isNovo?SIPEAGRO_NOVO_URL:SIPEAGRO_ANTIGO_URL;
+  const label=isNovo?'Novo (MV…)':'Antigo (…/YYYY)';
+  const url=baseUrl+'/'+uf+'.json';
   document.getElementById('lb-sip').innerHTML='';document.getElementById('lb-sip').style.display='none';
-  sipLog('Buscando base SIPEAGRO para '+uf+'...','ok');
+  sipLog('Buscando SIPEAGRO '+label+' para '+uf+'...','ok');
   
   fetch(url).then(r=>{
-    if(!r.ok)throw new Error('HTTP '+r.status+' — verifique se a base está hospedada em '+SIPEAGRO_BASE_URL);
+    if(!r.ok)throw new Error('HTTP '+r.status+' — base '+label+' não encontrada para '+uf);
     return r.json();
   }).then(data=>{
-    // data = {crmv: [mvNumber, nome], ...}
+    // data = {crmv: [cadastroNumber, nome], ...} or {crmv: "mvNumber"}
     const entries=Object.entries(data);
-    sipLog('Base '+uf+': '+entries.length+' veterinários carregados','ok');
+    sipLog('Base '+label+' '+uf+': '+entries.length+' veterinários carregados','ok');
     
     // Cross-reference with prescribers
     const prescs=ldP();let matched=0,updated=0,already=0;
@@ -1062,12 +1066,13 @@ function fetchSipeagroOnline(){
     }
     
     // Save last update date
-    const cfg=ldCfg();cfg.sipeagroLastUpdate=new Date().toISOString().slice(0,10);cfg.sipeagroUF=uf;svCfg(cfg);
-    sipLog('Atualizado em: '+cfg.sipeagroLastUpdate,'ok');
+    const cfg=ldCfg();cfg.sipeagroLastUpdate=new Date().toISOString().slice(0,10);cfg.sipeagroUF=uf;cfg.sipeagroFormato=formato;svCfg(cfg);
+    sipLog('Atualizado em: '+cfg.sipeagroLastUpdate+' (formato '+label+')','ok');
     renderMov();
   }).catch(err=>{
     sipLog('✗ Erro ao buscar: '+err.message,'warn');
-    sipLog('Configure a URL base em SIPEAGRO_BASE_URL ou importe manualmente via planilha.','warn');
+    if(!isNovo) sipLog('Para o formato antigo, crie o repositório pauloedsfer/sipeagro-antigo no GitHub com os JSONs.','warn');
+    sipLog('Ou importe manualmente via planilha abaixo.','warn');
   });
 }
 function setupSipDZ(){
