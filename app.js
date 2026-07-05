@@ -767,13 +767,17 @@ function printEtq(modo){
       html+='<div class="eq-page">';
       for(const l of p){
         const _c2=normCPF(l.cpf||getC(l.tutor)||'');
-        html+='<div class="eq"><div class="eq-s">'+(l.substancia||'')+'</div>'+
-        '<div class="eq-f"><strong>OM:</strong> '+l.nrOm+' <strong>DOC:</strong> '+(l.nrDoc||'')+' <strong>Data:</strong> '+etqDt(l)+'</div>'+
-        '<div class="eq-f"><strong>Tutor:</strong> '+(l.tutor||'')+'</div>'+
-        '<div class="eq-f"><strong>CPF:</strong> '+(_c2||'_________')+'</div>'+
-        '<div class="eq-f"><strong>End.:</strong> '+(l.endereco||getE(l.tutor)||'')+'</div>'+
-        '<div class="eq-f"><strong>Presc.:</strong> '+(l.prescritor||'')+' <strong>CRMV-'+(l.crmvUf||'GO')+':</strong> '+(l.crmvNr||'')+'</div>'+
-        '<div class="eq-f"><strong>Conc.:</strong> '+(l.calculo||'')+' <strong>Qtd:</strong> '+(l.qtd?l.qtd.toFixed(4)+' g':'')+'</div>'+
+        const _cm2=getLancCadMapa(l);
+        const _e2=l.endereco||getE(l.tutor)||'';
+        html+='<div class="eq">'+
+        '<div class="eq-s">'+(l.substancia||'')+'</div>'+
+        '<div class="eq-l"><span>OM: '+(l.nrOm||'—')+'</span><span>Doc: '+(l.nrDoc||'—')+'</span><span>'+etqDt(l)+'</span></div>'+
+        '<div class="eq-f"><strong>Tutor: </strong>'+(l.tutor||'')+'</div>'+
+        '<div class="eq-f2"><span><strong>CPF: </strong>'+(_c2||'___.___.___-__')+'</span><span><strong>Qtd: </strong>'+(l.qtd?l.qtd.toFixed(4)+' g':'')+'</span></div>'+
+        '<div class="eq-f"><strong>End.: </strong>'+_e2+'</div>'+
+        '<div class="eq-f"><strong>Presc.: </strong>'+(l.prescritor||'')+'</div>'+
+        '<div class="eq-f2"><span><strong>CRMV-'+(l.crmvUf||'GO')+': </strong>'+(l.crmvNr||'')+'</span>'+(_cm2?'<span><strong>MAPA: </strong>'+_cm2+'</span>':'')+'</div>'+
+        '<div class="eq-f"><strong>Conc.: </strong>'+(l.calculo||'')+'</div>'+
         '<div class="eq-rt"><span>RT:</span> <span class="eq-rl"></span></div></div>';
       }
       for(let i=p.length;i<15;i++)html+='<div class="eq" style="border-color:transparent"></div>';

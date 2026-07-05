@@ -135,14 +135,18 @@ footer{margin-top:40px;text-align:center;font-family:var(--mono);font-size:.68re
   .pr-corpo .re{background:#f0f0f0;font-weight:bold}
   .pr-corpo .crt{width:14mm}
   .pr-etq{font-family:Arial,sans-serif}
-  .eq-page{width:210mm;height:297mm;padding:6mm 4mm;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(5,1fr);gap:1.5mm;page-break-after:always}
+  .eq-page{width:210mm;height:297mm;padding:5mm 4mm;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(5,1fr);gap:1.2mm;page-break-after:always}
   .eq-page:last-child{page-break-after:auto}
-  .eq{border:1px solid #999;border-radius:1.5mm;padding:2mm 2.5mm;display:flex;flex-direction:column;justify-content:center;font-size:6.5pt;line-height:1.3;overflow:hidden}
-  .eq strong{font-size:6.5pt}
-  .eq .eq-s{font-size:7.5pt;font-weight:bold;border-bottom:1px solid #ccc;padding-bottom:.5mm;margin-bottom:.5mm}
-  .eq .eq-f{margin-bottom:.3mm}
-  .eq .eq-rt{margin-top:auto;border-top:1px solid #ccc;padding-top:1mm;font-size:6pt;display:flex;justify-content:space-between;align-items:center}
-  .eq .eq-rl{border-bottom:1px solid #000;width:28mm;display:inline-block;height:3mm}
+  .eq{border:1px solid #888;border-radius:1.5mm;padding:2mm 2.5mm 1.5mm;display:flex;flex-direction:column;font-size:7.5pt;line-height:1.35;overflow:hidden}
+  .eq strong{font-size:6.8pt;color:#333}
+  .eq .eq-s{font-size:9pt;font-weight:bold;text-align:center;border-bottom:1.5px solid #555;padding-bottom:1mm;margin-bottom:1mm;letter-spacing:.3px}
+  .eq .eq-l{display:flex;justify-content:space-between;font-size:7pt;font-weight:600;border-bottom:1px solid #ddd;padding-bottom:.8mm;margin-bottom:1mm}
+  .eq .eq-f{margin-bottom:.6mm;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .eq .eq-f2{display:flex;gap:2mm;margin-bottom:.6mm}
+  .eq .eq-f2>span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .eq .eq-f2>span:first-child{flex:1}
+  .eq .eq-rt{margin-top:auto;border-top:1px solid #aaa;padding-top:1.2mm;font-size:7pt;display:flex;justify-content:space-between;align-items:center}
+  .eq .eq-rl{border-bottom:1px solid #000;width:26mm;display:inline-block;height:3.5mm}
   .pr-etql{font-family:'Arial Narrow',Arial,Helvetica,sans-serif;padding:3mm 5mm}
   .eql{border:0.4pt solid #666;margin-bottom:0.8mm;font-size:6.5pt;line-height:1.25;page-break-inside:avoid}
   .eql-h{display:flex;gap:0;background:#f0f0f0;border-bottom:0.4pt solid #999}
