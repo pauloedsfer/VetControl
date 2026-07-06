@@ -635,7 +635,7 @@ function renderEtiqueta(){
   }
 
   var q=S.etiqQ.toLowerCase();
-  var _etiq=S.etiqEntries.slice().sort(function(a,b){return (b.id||0)-(a.id||0);});
+  var _etiq=S.etiqEntries.slice().sort(function(a,b){return (parseInt(b.re,10)||0)-(parseInt(a.re,10)||0);});
   var filtE=q?_etiq.filter(function(en){return (en.substancia||'').toLowerCase().indexOf(q)>=0||(en.re||'').indexOf(q)>=0;}):_etiq;
   var listHtml='';
   filtE.forEach(function(en){
@@ -660,7 +660,7 @@ function renderHistorico(){
   r+=yearTabs(S.histYear,'histYear');
   if(S._loadingHist){return r+'<div style="text-align:center;padding:40px;color:#718096"><div style="font-size:32px;margin-bottom:10px">⏳</div><div>Carregando entradas de 20'+S.histYear+'...</div></div>';}
   var q=S.histQ.toLowerCase();
-  var _hist=S.histEntries.slice().sort(function(a,b){return (b.id||0)-(a.id||0);});
+  var _hist=S.histEntries.slice().sort(function(a,b){return (parseInt(b.re,10)||0)-(parseInt(a.re,10)||0);});
   var fil=q?_hist.filter(function(en){return (en.substancia||'').toLowerCase().indexOf(q)>=0||(en.re||'').indexOf(q)>=0||(en.fornecedor||'').toLowerCase().indexOf(q)>=0;}):_hist;
   r+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div style="font-size:13px;color:#718096">'+fil.length+' entrada'+(fil.length!==1?'s':'')+' em 20'+S.histYear+'</div><input id="hq" style="width:260px" placeholder="Buscar produto, RE, fornecedor..." value="'+e(S.histQ)+'"></div>';
   if(S.histEntries.length===0){r+='<div style="text-align:center;padding:60px;color:#A0AEC0;border:2px dashed #E2E8F0;border-radius:12px"><div style="font-size:40px;margin-bottom:10px">📋</div><div>Nenhuma entrada em 20'+S.histYear+'.<br>Importe dados em ⚙️ Gerenciar.</div></div>';return r;}
