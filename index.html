@@ -251,6 +251,11 @@ footer{margin-top:40px;text-align:center;font-family:var(--mono);font-size:.68re
 <button class="bs bsm" onclick="revertSipeagro()" style="font-size:.66rem">↩ Reverter</button>
 <button class="bs bsm" onclick="showSipeagroStatus()" style="font-size:.66rem">📋 Status</button>
 </div>
+<div style="font-family:var(--mono);font-size:.6rem;color:var(--mt);margin:4px 0 6px">Ou consulte o número manualmente no painel oficial do SIPEAGRO (MAPA):</div>
+<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+<a class="bs bsm" href="https://mapa-indicadores.agricultura.gov.br/publico/extensions/Medicos_veterinarios_cadastrados_no_sipeagro/Medicos_veterinarios_cadastrados_no_sipeagro.html" target="_blank" rel="noopener" style="font-size:.66rem;text-decoration:none">🔗 Consultar site · Nº Novo (MV…)</a>
+<a class="bs bsm" href="https://mapa-indicadores.agricultura.gov.br/publico/single/?appid=95a12fdb-9e5a-4faa-ac26-38a2244c6a39&amp;sheet=1a688491-6640-492f-ae83-f8fedb3d0aaf&amp;opt=ctxmenu&amp;select=clearall%20Para%20consultar%20n%C3%BAmero%20do%20SIPEAGRO%20do%20veterin%C3%A1rio" target="_blank" rel="noopener" style="font-size:.66rem;text-decoration:none">🔗 Consultar site · Nº Antigo (…/YYYY)</a>
+</div>
 <div style="font-family:var(--mono);font-size:.6rem;color:var(--mt);margin-bottom:6px">Ou importe planilha manualmente:</div>
 <div class="dz" id="z-sip"><input type="file" id="f-sip" accept=".xls,.xlsx,.csv"/><span class="di">🏥</span><span class="dl">Base SIPEAGRO (XLSX/CSV)</span><span class="dh">Médicos Veterinários Cadastrados</span><div class="df" id="fn-sip"></div></div>
 <button class="bp" id="btn-sip" disabled style="margin-top:10px" onclick="processSipeagro()">Cruzar com Prescritores</button>
