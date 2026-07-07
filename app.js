@@ -1,5 +1,5 @@
 /**
- * CONTROLE ESPECIAL v5.0 — Fórmula Animal
+ * CONTROLE ESPECIAL v6.0 — Fórmula Animal
  * Escrituração digital de substâncias controladas veterinárias
  * Conformidade Portaria MAPA nº 837/2025
  */
@@ -85,6 +85,7 @@ function swTab(id,btn){
   document.getElementById('tp-'+id).classList.add('a');
   if(btn)btn.classList.add('a');
   if(id==='mov')renderMov();
+  if(id==='escr')renderEscr();
   if(id==='hist')renderHist();
 }
 
@@ -887,6 +888,163 @@ function printAnexoVIII(){
   window.print();
 }
 
+// ═══ ESCRITURAÇÃO SEMANAL (Anexo IV · Art. 11 §3 — atualização a cada 7 dias) ═══
+const ESC_ALL='__todas__';
+
+function escMonday(dateStr){
+  const d=new Date((dateStr||fmtDiso(new Date()))+'T12:00:00');
+  const dow=(d.getDay()+6)%7;// segunda=0
+  d.setDate(d.getDate()-dow);d.setHours(12,0,0,0);return d;
+}
+function escWeekBounds(dateStr){
+  const mon=escMonday(dateStr);const sun=new Date(mon);sun.setDate(mon.getDate()+6);
+  return{iniD:mon,fimD:sun,ini:fmtDiso(mon),fim:fmtDiso(sun)};
+}
+function escWeekNum(d){
+  const t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));
+  const day=(t.getUTCDay()+6)%7;t.setUTCDate(t.getUTCDate()-day+3);
+  const firstThu=new Date(Date.UTC(t.getUTCFullYear(),0,4));
+  const fd=(firstThu.getUTCDay()+6)%7;firstThu.setUTCDate(firstThu.getUTCDate()-fd+3);
+  return 1+Math.round((t-firstThu)/(7*864e5));
+}
+function escWeekRef(){return document.getElementById('esc-week').value||fmtDiso(new Date());}
+
+// Linha "Outras Informações" conforme Art. 11 §4
+function lancInfo(l){
+  if(l.tipo==='saida'){
+    const _cpf=l.cpf||getC(l.tutor)||'';
+    return[l.tutor,_cpf?'CPF:'+normCPF(_cpf):'',l.nrReceita?'Rec:'+l.nrReceita:'',l.prescritor?'CRMV-'+(l.crmvUf||'GO')+' '+l.crmvNr:'',getLancCadMapa(l)?'MAPA:'+getLancCadMapa(l):''].filter(Boolean).join(' | ');
+  }
+  if(l.tipo==='entrada'){
+    return['ENTRADA',l.nrPartida?'Partida:'+l.nrPartida:'',l.nfNumero?'NF:'+l.nfNumero:'',l.cnpjFornecedor?'CNPJ:'+l.cnpjFornecedor:'',l.fornecedor||l.descricao].filter(Boolean).join(' | ');
+  }
+  return'PERDA: '+(l.descricao||'');
+}
+
+// Saldo transportado + lançamentos da semana + saldo final
+function escrData(nm,ini,fim){
+  recalc(nm);
+  const sm=getSM(nm);
+  const sorted=sm.lancamentos.slice().sort((a,b)=>(a.data||'').localeCompare(b.data||''));
+  let saldo=sm.estoqueInicial||0;
+  for(const l of sorted){if(l.data&&l.data<ini){saldo=l.tipo==='entrada'?ar(saldo+l.qtd):ar(saldo-l.qtd);}}
+  const saldoIni=saldo;let run=saldoIni;const week=[];
+  for(const l of sorted){
+    if(l.data&&l.data>=ini&&l.data<=fim){
+      const antes=run;run=l.tipo==='entrada'?ar(run+l.qtd):ar(run-l.qtd);
+      week.push({l,antes,apos:run});
+    }
+  }
+  const ent=ar(week.filter(w=>w.l.tipo==='entrada').reduce((a,w)=>a+w.l.qtd,0));
+  const sai=ar(week.filter(w=>w.l.tipo==='saida').reduce((a,w)=>a+w.l.qtd,0));
+  const per=ar(week.filter(w=>w.l.tipo==='perda').reduce((a,w)=>a+w.l.qtd,0));
+  return{saldoIni,saldoFim:run,week,ent,sai,per};
+}
+function escrSubList(){SUB=ldSubs();return SUB;}
+
+function renderEscr(){
+  const sel=document.getElementById('esc-sub');if(!sel)return;
+  const subs=escrSubList();
+  const cur=sel.value||(document.getElementById('mv-sub')?document.getElementById('mv-sub').value:'')||(subs[0]?subs[0].n:'');
+  sel.innerHTML='<option value="'+ESC_ALL+'"'+(cur===ESC_ALL?' selected':'')+'>Todas as substâncias</option>'+
+    subs.map(s=>'<option value="'+s.n+'"'+(s.n===cur?' selected':'')+'>'+s.n+' ('+s.l+')</option>').join('');
+  if(!document.getElementById('esc-week').value)document.getElementById('esc-week').value=fmtDiso(new Date());
+  const{ini,fim,iniD}=escWeekBounds(escWeekRef());
+  document.getElementById('esc-week-label').textContent='Semana '+escWeekNum(iniD)+'/'+iniD.getFullYear()+' · '+fmtD(new Date(ini+'T12:00:00'))+' a '+fmtD(new Date(fim+'T12:00:00'));
+  const res=document.getElementById('esc-res'),prev=document.getElementById('esc-preview');
+  const incVazio=document.getElementById('esc-incvazio').checked;
+
+  if(sel.value===ESC_ALL){
+    res.innerHTML='';
+    let rows='';
+    subs.forEach(s=>{
+      const d=escrData(s.n,ini,fim);const hasMov=d.week.length>0;
+      if(!hasMov&&!incVazio&&d.saldoFim===0&&d.saldoIni===0)return;
+      rows+='<tr'+(!hasMov?' style="opacity:.55"':'')+'><td>'+s.n+' <span style="color:var(--mt)">('+s.l+')</span></td>'+
+        '<td style="text-align:right">'+d.saldoIni.toFixed(4)+'</td>'+
+        '<td style="text-align:right;color:var(--gn)">'+(d.ent?d.ent.toFixed(4):'—')+'</td>'+
+        '<td style="text-align:right;color:var(--ac)">'+(d.sai?d.sai.toFixed(4):'—')+'</td>'+
+        '<td style="text-align:right;color:var(--rd)">'+(d.per?d.per.toFixed(4):'—')+'</td>'+
+        '<td style="text-align:right;font-weight:700'+(d.saldoFim<0?';color:var(--rd)':'')+'">'+d.saldoFim.toFixed(4)+'</td>'+
+        '<td style="text-align:center;color:var(--mt);font-size:.62rem">'+(hasMov?d.week.length+' lanç.':'sem mov.')+'</td></tr>';
+    });
+    if(!rows)rows='<tr><td colspan="7" style="text-align:center;color:var(--mt);padding:18px">Nenhuma substância com movimentação ou saldo nesta semana.</td></tr>';
+    prev.innerHTML='<div style="overflow-x:auto"><table class="mt"><thead><tr><th>Substância</th><th style="text-align:right">Saldo inicial(g)</th><th style="text-align:right">Entradas(g)</th><th style="text-align:right">Saídas(g)</th><th style="text-align:right">Perdas(g)</th><th style="text-align:right">Saldo final(g)</th><th style="text-align:center">Semana</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
+      '<div style="font-family:var(--mono);font-size:.64rem;color:var(--mt);margin-top:8px;line-height:1.5">Ao imprimir com "Todas as substâncias", será gerada <b>uma folha por substância</b> (Anexo IV). '+(incVazio?'Substâncias sem movimento entram como folha de atesto.':'Marque a opção acima para incluir folhas de atesto de substâncias sem movimento.')+'</div>';
+    return;
+  }
+
+  const nm=sel.value,d=escrData(nm,ini,fim);
+  res.innerHTML=[
+    {n:d.saldoIni.toFixed(4)+' g',l:'Saldo inicial',c:''},
+    {n:(d.ent?d.ent.toFixed(4):'0')+' g',l:'Entradas',c:'var(--gn)'},
+    {n:(d.sai?d.sai.toFixed(4):'0')+' g',l:'Saídas',c:'var(--ac)'},
+    {n:(d.per?d.per.toFixed(4):'0')+' g',l:'Perdas',c:'var(--rd)'},
+    {n:d.saldoFim.toFixed(4)+' g',l:'Saldo final',c:d.saldoFim<0?'var(--rd)':'var(--gn)'},
+  ].map(x=>'<div class="sbox"><div class="snum" style="font-size:1rem;'+(x.c?'color:'+x.c:'')+'">'+x.n+'</div><div class="slbl">'+x.l+'</div></div>').join('');
+
+  let h='<div style="overflow-x:auto"><table class="mt"><thead><tr><th>Data</th><th>Tipo</th><th style="text-align:right">Est.inic.(g)</th><th style="text-align:right">Entrada(g)</th><th style="text-align:right">Saída(g)</th><th style="text-align:right">Perdas(g)</th><th style="text-align:right">Est.final(g)</th><th>Reg/Doc</th><th>Outras informações</th></tr></thead><tbody>';
+  h+='<tr style="background:rgba(117,102,160,.08);font-weight:700"><td>'+fmtD(new Date(ini+'T12:00:00'))+'</td><td>—</td><td style="text-align:right">'+d.saldoIni.toFixed(4)+'</td><td></td><td></td><td></td><td style="text-align:right">'+d.saldoIni.toFixed(4)+'</td><td></td><td style="color:var(--mt)">Saldo transportado da semana anterior</td></tr>';
+  if(!d.week.length)h+='<tr><td colspan="9" style="text-align:center;color:var(--mt);padding:16px">Sem movimentação nesta semana</td></tr>';
+  else d.week.forEach(w=>{
+    const l=w.l;const tag=l.tipo==='entrada'?'me':l.tipo==='saida'?'ms':'mp';
+    const tl=l.tipo==='entrada'?'Entrada':l.tipo==='saida'?'Saída':'Perda';
+    const dt=l.data?new Date(l.data+'T12:00:00'):null;
+    h+='<tr><td>'+(dt?fmtD(dt):'')+'</td><td><span class="mtag '+tag+'">'+tl+'</span></td>'+
+      '<td style="text-align:right">'+w.antes.toFixed(4)+'</td>'+
+      '<td style="text-align:right">'+(l.tipo==='entrada'?l.qtd.toFixed(4):'')+'</td>'+
+      '<td style="text-align:right">'+(l.tipo==='saida'?l.qtd.toFixed(4):'')+'</td>'+
+      '<td style="text-align:right">'+(l.tipo==='perda'?l.qtd.toFixed(4):'')+'</td>'+
+      '<td style="text-align:right'+(w.apos<0?';color:var(--rd);font-weight:700':'')+'">'+w.apos.toFixed(4)+'</td>'+
+      '<td>'+(l.nrOm?l.nrOm+'/'+(l.nrDoc||''):(l.tipo==='entrada'?'ENT':(l.tipo==='perda'?'PER':'')))+'</td>'+
+      '<td style="font-size:.66rem;max-width:280px;word-break:break-word">'+lancInfo(l)+'</td></tr>';
+  });
+  h+='<tr style="background:rgba(61,139,110,.08);font-weight:700"><td>'+fmtD(new Date(fim+'T12:00:00'))+'</td><td>—</td><td></td><td style="text-align:right;color:var(--gn)">'+(d.ent?d.ent.toFixed(4):'')+'</td><td style="text-align:right;color:var(--ac)">'+(d.sai?d.sai.toFixed(4):'')+'</td><td style="text-align:right;color:var(--rd)">'+(d.per?d.per.toFixed(4):'')+'</td><td style="text-align:right">'+d.saldoFim.toFixed(4)+'</td><td></td><td style="color:var(--mt)">Saldo final da semana</td></tr>';
+  h+='</tbody></table></div>';
+  prev.innerHTML=h;
+}
+
+function escrShiftWeek(delta){
+  const inp=document.getElementById('esc-week');const cur=inp.value||fmtDiso(new Date());
+  const d=new Date(cur+'T12:00:00');d.setDate(d.getDate()+delta*7);inp.value=fmtDiso(d);renderEscr();
+}
+function escrToday(){document.getElementById('esc-week').value=fmtDiso(new Date());renderEscr();}
+
+// ── Impressão no formato Anexo IV (DIA | MÊS | ANO) ──
+function escrPageHtml(nm,ini,fim){
+  const s=ldSubs().find(x=>x.n===nm)||{n:nm,l:'',d:''};
+  const d=escrData(nm,ini,fim);const _cfg=ldCfg();
+  const iniD=new Date(ini+'T12:00:00'),fimD=new Date(fim+'T12:00:00');
+  const splitDate=(dt)=>dt?'<td>'+dt.getDate()+'</td><td>'+(dt.getMonth()+1)+'</td><td>'+dt.getFullYear()+'</td>':'<td></td><td></td><td></td>';
+  let html='<div class="pr-corpo"><h2>LIVRO DE REGISTRO DE ESTOQUE DE SUBSTÂNCIAS SUJEITAS AO CONTROLE ESPECIAL E PRODUTOS DE USO VETERINÁRIO QUE AS CONTENHAM</h2>'+
+    '<h3>Substância (DCB): '+s.n+' ('+s.d+') | Lista: '+s.l+'<br>Nome do produto: Manipulado | Concentração/apresentação: conforme prescrição<br>'+(_cfg.razao||_cfg.fantasia||'')+' · CNPJ: '+(_cfg.cnpj||'_____')+' · MAPA: '+(_cfg.mapa||'_____')+'<br>Escrituração semanal — Semana '+escWeekNum(iniD)+'/'+iniD.getFullYear()+': '+fmtD(iniD)+' a '+fmtD(fimD)+'<br><small>Portaria MAPA nº 837/2025 — Anexo IV · Art. 11, §3 (atualização a cada 7 dias)</small></h3>'+
+    '<table><tr><th style="width:7mm">DIA</th><th style="width:7mm">MÊS</th><th style="width:10mm">ANO</th><th>EST.INICIAL(g)</th><th>ENTRADA(g)</th><th>SAÍDA(g)</th><th>PERDAS(g)</th><th>EST.FINAL(g)</th><th style="width:16mm">REG/DOC</th><th class="ci">OUTRAS INFORMAÇÕES</th><th class="crt">ASS. RT</th></tr>';
+  html+='<tr class="re">'+splitDate(iniD)+'<td>'+d.saldoIni.toFixed(4)+'</td><td></td><td></td><td></td><td>'+d.saldoIni.toFixed(4)+'</td><td></td><td class="ci">Saldo transportado da semana anterior</td><td></td></tr>';
+  if(!d.week.length)html+='<tr><td colspan="8" style="text-align:center">SEM MOVIMENTAÇÃO NO PERÍODO</td><td></td><td class="ci"></td><td></td></tr>';
+  else d.week.forEach(w=>{
+    const l=w.l,dt=l.data?new Date(l.data+'T12:00:00'):null;
+    const ent=l.tipo==='entrada'?l.qtd:0,sai=l.tipo==='saida'?l.qtd:0,per=l.tipo==='perda'?l.qtd:0;
+    const regdoc=l.nrOm?l.nrOm+'/'+(l.nrDoc||''):(l.tipo==='entrada'?'ENT':(l.tipo==='perda'?'PER':''));
+    html+='<tr>'+splitDate(dt)+'<td>'+w.antes.toFixed(4)+'</td><td>'+(ent?ent.toFixed(4):'')+'</td><td>'+(sai?sai.toFixed(4):'')+'</td><td>'+(per?per.toFixed(4):'')+'</td><td>'+w.apos.toFixed(4)+'</td><td>'+regdoc+'</td><td class="ci">'+lancInfo(l)+'</td><td></td></tr>';
+  });
+  html+='<tr class="re">'+splitDate(fimD)+'<td></td><td>'+(d.ent?d.ent.toFixed(4):'')+'</td><td>'+(d.sai?d.sai.toFixed(4):'')+'</td><td>'+(d.per?d.per.toFixed(4):'')+'</td><td>'+d.saldoFim.toFixed(4)+'</td><td></td><td class="ci">Saldo final da semana</td><td></td></tr></table>';
+  html+='<div style="margin-top:6mm;font-size:8pt">Escrituração conferida e atualizada em ______ / ______ / __________ &nbsp;—&nbsp; atualização no máximo a cada 7 dias (Art. 11, §3).</div>'+
+    '<div style="margin-top:16mm;text-align:center;font-size:8pt"><div style="border-top:1px solid #000;width:80mm;margin:0 auto 1mm"></div><strong>'+(_cfg.rtNome||'Responsável Técnico')+'</strong><br>Farmacêutico(a) Responsável Técnico — CRF '+(_cfg.rtCrf||'________')+'</div></div>';
+  return html;
+}
+function printEscrSemana(){
+  const sel=document.getElementById('esc-sub');
+  const{ini,fim}=escWeekBounds(escWeekRef());
+  const subs=escrSubList();let targets;
+  if(sel.value===ESC_ALL){
+    const inc=document.getElementById('esc-incvazio').checked;
+    targets=subs.filter(s=>{const d=escrData(s.n,ini,fim);return inc||d.week.length>0;}).map(s=>s.n);
+    if(!targets.length){alert('Nenhuma substância com movimentação nesta semana. Marque "incluir substâncias sem movimentação" para gerar folhas de atesto.');return;}
+  }else targets=[sel.value];
+  document.getElementById('print-area').innerHTML=targets.map(nm=>escrPageHtml(nm,ini,fim)).join('');
+  window.print();
+}
+
 // ═══ HISTÓRICO ═══
 function renderHist(){
   const hist=ldH(),el=document.getElementById('hist-list');
@@ -910,7 +1068,7 @@ function delHist(id){if(!confirm('Excluir?'))return;svH(ldH().filter(r=>r.id!==i
 
 // ═══ BACKUP ═══
 function exportarBackup(){
-  const data={versao:5,exportadoEm:new Date().toISOString(),historico:ldH(),cpfs:ldC(),enderecos:ldE(),prescritores:ldP(),movimentos:ldM()};
+  const data={versao:6,exportadoEm:new Date().toISOString(),historico:ldH(),cpfs:ldC(),enderecos:ldE(),prescritores:ldP(),movimentos:ldM()};
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);
   a.download='backup_controlados_'+new Date().toISOString().slice(0,10)+'.json';a.click();
@@ -1902,7 +2060,8 @@ const _hdrE=document.getElementById('hdr-estab');
 if(_cfg.fantasia)_hdrE.textContent=_cfg.fantasia;
 else _hdrE.textContent='Fórmula Animal · Escrituração Digital';
 setTimeout(function(){try{renderMov();}catch(e){console.error('renderMov init:',e);}},100);
-console.log('Controle Especial v5.0 inicializado com '+SUB.length+' substâncias');
+document.getElementById('esc-week').value=fmtDiso(new Date());
+console.log('Controle Especial v6.0 inicializado com '+SUB.length+' substâncias');
 }catch(e){console.error('INIT ERROR:',e);}
 // Auto-migrar dados v3 se necessário
 try{(function(){
