@@ -1319,7 +1319,7 @@ function exportMapa(){
     if(!nf)return '';
     const digits=(nf+'').replace(/\D/g,'');
     if(!digits)return nf;
-    return "'"+digits.padStart(9,'0');
+    return digits.padStart(9,'0');
   }
   
   // Collect data across all substances
@@ -1403,11 +1403,22 @@ function exportMapa(){
   // Build XLSX workbook
   const wb=XLSX.utils.book_new();
   
+  // Helper: force cells in a column to text format (for NFs, zeros, etc.)
+  function forceTextCol(ws,col,startRow){
+    const range=XLSX.utils.decode_range(ws['!ref']);
+    for(let r=startRow;r<=range.e.r;r++){
+      const addr=XLSX.utils.encode_cell({r:r,c:col});
+      if(ws[addr]){ws[addr].t='s';ws[addr].z='@';ws[addr].v=String(ws[addr].v||'');}
+    }
+  }
+  
   // Sheet 1: Estoque inicial
   const eiData=[['Substância','Quantidade']];
   estoqueInicial.forEach(e=>eiData.push([e.substancia,e.qtd]));
   const ws1=XLSX.utils.aoa_to_sheet(eiData);
   ws1['!cols']=[{wch:22},{wch:14}];
+  // Force Quantidade column as text (for zeros to show properly)
+  forceTextCol(ws1,1,1);
   XLSX.utils.book_append_sheet(wb,ws1,'Estoque inicial');
   
   // Sheet 2: Entradas
@@ -1415,6 +1426,8 @@ function exportMapa(){
   entradas.forEach(e=>enData.push([e.substancia,e.tipoEntrada,e.qtd,e.identificacao,e.nome,e.nf,e.data]));
   const ws2=XLSX.utils.aoa_to_sheet(enData);
   ws2['!cols']=[{wch:18},{wch:16},{wch:12},{wch:22},{wch:30},{wch:20},{wch:16}];
+  // Force NF column (5) as text
+  forceTextCol(ws2,5,1);
   XLSX.utils.book_append_sheet(wb,ws2,'Entradas');
   
   // Sheet 3: Saídas
@@ -1422,6 +1435,8 @@ function exportMapa(){
   saidas.forEach(s=>saData.push([s.substancia,s.tipoSaida,s.qtd,s.identificacao,s.nome,s.prescritor,s.cadMapa,s.nrOM,s.nf,s.data]));
   const ws3=XLSX.utils.aoa_to_sheet(saData);
   ws3['!cols']=[{wch:18},{wch:18},{wch:12},{wch:18},{wch:28},{wch:28},{wch:24},{wch:18},{wch:20},{wch:16}];
+  // Force NF column (8) as text
+  forceTextCol(ws3,8,1);
   XLSX.utils.book_append_sheet(wb,ws3,'Saídas');
   
   // Download
