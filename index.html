@@ -178,11 +178,10 @@ footer{margin-top:40px;text-align:center;font-family:var(--mono);font-size:.68re
 <header>
 <div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="8" height="14" rx="4" ry="4" transform="rotate(-45 7 15)"/><line x1="5.5" y1="12.5" x2="10.5" y2="17.5" opacity=".4"/><rect x="13" y="2" width="8" height="14" rx="4" ry="4" transform="rotate(-45 17 9)"/><line x1="15.5" y1="6.5" x2="20.5" y2="11.5" opacity=".4"/></svg></div>
 <div class="hdr"><h1>Controle Especial</h1><p id="hdr-estab">Fórmula Animal · Escrituração Digital</p></div>
-<span class="vtag">v6.0</span>
+<span class="vtag">v5.0</span>
 </header>
 <div class="tabs">
 <button class="tab a" onclick="swTab('mov',this)">Movimentos</button>
-<button class="tab" onclick="swTab('escr',this)">Escrituração</button>
 <button class="tab" onclick="swTab('imp',this)">Importar</button>
 <button class="tab" onclick="swTab('hist',this)">Histórico</button>
 <button class="tab" onclick="swTab('help',this)">Ajuda</button>
@@ -250,11 +249,6 @@ footer{margin-top:40px;text-align:center;font-family:var(--mono);font-size:.68re
 <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
 <button class="bs bsm" onclick="revertSipeagro()" style="font-size:.66rem">↩ Reverter</button>
 <button class="bs bsm" onclick="showSipeagroStatus()" style="font-size:.66rem">📋 Status</button>
-</div>
-<div style="font-family:var(--mono);font-size:.6rem;color:var(--mt);margin:4px 0 6px">Ou consulte o número manualmente no painel oficial do SIPEAGRO (MAPA):</div>
-<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
-<a class="bs bsm" href="https://mapa-indicadores.agricultura.gov.br/publico/extensions/Medicos_veterinarios_cadastrados_no_sipeagro/Medicos_veterinarios_cadastrados_no_sipeagro.html" target="_blank" rel="noopener" style="font-size:.66rem;text-decoration:none">🔗 Consultar site · Nº Novo (MV…)</a>
-<a class="bs bsm" href="https://mapa-indicadores.agricultura.gov.br/publico/single/?appid=95a12fdb-9e5a-4faa-ac26-38a2244c6a39&amp;sheet=1a688491-6640-492f-ae83-f8fedb3d0aaf&amp;opt=ctxmenu&amp;select=clearall%20Para%20consultar%20n%C3%BAmero%20do%20SIPEAGRO%20do%20veterin%C3%A1rio" target="_blank" rel="noopener" style="font-size:.66rem;text-decoration:none">🔗 Consultar site · Nº Antigo (…/YYYY)</a>
 </div>
 <div style="font-family:var(--mono);font-size:.6rem;color:var(--mt);margin-bottom:6px">Ou importe planilha manualmente:</div>
 <div class="dz" id="z-sip"><input type="file" id="f-sip" accept=".xls,.xlsx,.csv"/><span class="di">🏥</span><span class="dl">Base SIPEAGRO (XLSX/CSV)</span><span class="dh">Médicos Veterinários Cadastrados</span><div class="df" id="fn-sip"></div></div>
@@ -341,41 +335,13 @@ footer{margin-top:40px;text-align:center;font-family:var(--mono);font-size:.68re
 
 <div class="sl" style="margin-top:6px">Exportar Relatório Semestral para o MAPA</div>
 <div class="cd" style="padding:14px 18px">
-<div style="font-family:var(--mono);font-size:.64rem;color:var(--mt);line-height:1.5;margin-bottom:10px">Gera o arquivo XLSX no formato exigido pelo sistema gov.br para entrega do relatório semestral de movimentação (Portaria MAPA nº 837/2025). Inclui <b>todas</b> as substâncias com movimentação no período selecionado. Quantidades convertidas automaticamente de gramas para quilogramas.</div>
+<div style="font-family:var(--mono);font-size:.64rem;color:var(--mt);line-height:1.5;margin-bottom:10px">Gera o arquivo XLSX no formato exigido pelo sistema gov.br para entrega do relatório semestral de movimentação (Portaria MAPA nº 837/2025). Inclui <b>todas</b> as substâncias com movimentação no período selecionado. NFs formatadas com 9 dígitos e datas no padrão dd/mm/aaaa.</div>
 <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end">
 <div class="fd" style="margin-bottom:0"><label>Semestre</label><select id="mapa-sem" style="width:100px"><option value="1">1º Semestre</option><option value="2">2º Semestre</option></select></div>
 <div class="fd" style="margin-bottom:0"><label>Ano</label><input type="number" id="mapa-ano" style="width:80px"/></div>
 <button class="bg" style="padding:8px 20px;width:auto;font-size:.78rem" onclick="exportMapa()">📤 Exportar XLSX para MAPA</button>
 </div>
 <div class="lb" id="lb-mapa" style="display:none;margin-top:8px"></div>
-</div>
-</div>
-</div>
-
-<!-- ═══ TAB ESCRITURAÇÃO SEMANAL ═══ -->
-<div class="tp" id="tp-escr">
-<div class="cd" style="background:rgba(117,102,160,.04);border-color:var(--ac);margin-bottom:16px;padding:14px 18px">
-<div style="font-family:var(--dsp);font-weight:800;color:var(--acd);font-size:.88rem;margin-bottom:4px">Escrituração semanal do Livro de Registro</div>
-<div style="font-family:var(--mono);font-size:.66rem;color:var(--mt);line-height:1.6">Modelo <b>Anexo IV</b> da Portaria MAPA nº 837/2025. A escrituração deve estar legível, sem rasuras, e ser <b>atualizada no máximo a cada 7 dias</b> (Art. 11, §3). Selecione a semana, confira os lançamentos e imprima a folha com a área de assinatura do RT para arquivamento.</div>
-</div>
-
-<div class="sl">Semana de referência</div>
-<div class="cd">
-<div class="mv-tb">
-<div class="fd" style="margin-bottom:0;min-width:190px"><label>Substância</label><select id="esc-sub"></select></div>
-<button class="bs bsm" onclick="escrShiftWeek(-1)" style="align-self:end">← Semana anterior</button>
-<div class="fd" style="margin-bottom:0"><label>Dia da semana</label><input type="date" id="esc-week" onchange="renderEscr()"/></div>
-<button class="bs bsm" onclick="escrShiftWeek(1)" style="align-self:end">Semana seguinte →</button>
-<button class="bs bsm" onclick="escrToday()" style="align-self:end">Hoje</button>
-</div>
-<div style="font-family:var(--dsp);font-weight:800;color:var(--acd);font-size:.95rem;margin:2px 0 12px" id="esc-week-label">—</div>
-<label style="display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:.66rem;color:var(--mt);margin-bottom:12px;cursor:pointer"><input type="checkbox" id="esc-incvazio" style="width:15px;height:15px;accent-color:var(--ac)" onchange="renderEscr()"/> Incluir substâncias sem movimentação na semana (para atesto de "sem movimento")</label>
-
-<div class="mv-res" id="esc-res"></div>
-<div id="esc-preview"></div>
-
-<div class="brow" style="margin-top:14px">
-<button class="bg" style="width:auto;padding:10px 22px" onclick="printEscrSemana()">🖨 Imprimir Escrituração da Semana</button>
 </div>
 </div>
 </div>
@@ -392,17 +358,16 @@ footer{margin-top:40px;text-align:center;font-family:var(--mono);font-size:.68re
 
 <!-- ═══ TAB AJUDA ═══ -->
 <div class="tp" id="tp-help">
-<div class="sl">Passo a passo — Controle Especial v6.0</div>
+<div class="sl">Passo a passo — Controle Especial v5.0</div>
 <div class="cd" style="line-height:1.7;font-size:.82rem;color:var(--mt)">
 <p><strong style="color:var(--tx)">1. Importar XLS:</strong> Faça upload dos XLS do Farma Fácil, revise e confirme. Os dados vão direto para os Movimentos.</p>
 <p style="margin-top:8px"><strong style="color:var(--tx)">2. Importar PDF MAPA:</strong> Faça upload do relatório PDF gerado pelo Farma Fácil. O sistema extrai CPFs dos tutores e Cadastros SIPEAGRO dos prescritores automaticamente. Revise e confirme para popular os cadastros.</p>
 <p style="margin-top:8px"><strong style="color:var(--tx)">3. Movimentos (hub central):</strong> Visualize por substância, selecione registros, imprima Corpo, Etiquetas, Anexo IX (manipuladores), VII e VIII. Adicione entradas (NF, CNPJ, Nº Partida) e perdas.</p>
-<p style="margin-top:8px"><strong style="color:var(--tx)">3.1. Escrituração semanal (Anexo IV):</strong> Nova aba para fechar e assinar a escrituração <strong>a cada 7 dias</strong> (Art. 11 §3). Navegue por semana (segunda a domingo), confira o saldo transportado, os lançamentos da semana e o saldo final, e imprima a folha no formato Anexo IV com data de conferência e área de assinatura do RT. Use "Todas as substâncias" para imprimir uma folha por substância de uma só vez.</p>
 <p style="margin-top:8px"><strong style="color:var(--tx)">4. Impressão:</strong> O Corpo inclui coluna ASSINATURA DO RT. "Outras informações" inclui CPF, Nº Partida, CNPJ fornecedor, Cadastro MAPA do prescritor — conforme Art. 11 §4 da Portaria MAPA nº 837/2025.</p>
 <p style="margin-top:8px"><strong style="color:var(--tx)">5. Prescritores:</strong> Cadastro salva CRMV + UF + Cadastro MAPA (SIPEAGRO). Formato: "CRMV-GO 1234".</p>
 <p style="margin-top:8px"><strong style="color:var(--tx)">6. Estoque:</strong> O estoque inicial é automaticamente o saldo final dos movimentos. Edite apenas na abertura do semestre.</p>
 <p style="margin-top:8px"><strong style="color:var(--tx)">7. Backup:</strong> Exporte regularmente. O sistema avisa após 7 dias sem backup.</p>
-<p style="margin-top:8px"><strong style="color:var(--tx)">8. Exportar para MAPA:</strong> A partir de jul/2026, o relatório semestral deve ser entregue via sistema gov.br. O botão "Exportar XLSX para MAPA" gera o arquivo no formato exato (3 abas: Estoque Inicial, Entradas, Saídas em kg). Acesse: <a href="https://www.gov.br/pt-br/servicos/insercao-de-obrigatorios-para-os-fabricantes-distribuidores-comerciantes-de-produtos-de-uso-veterinario-sob-controle-especial" target="_blank" style="color:var(--ac);font-size:.75rem">Sistema MAPA</a>. Dúvidas: duvidas.relatoriocontrolados@agro.gov.br</p>
+<p style="margin-top:8px"><strong style="color:var(--tx)">8. Exportar para MAPA:</strong> A partir de jul/2026, o relatório semestral deve ser entregue via sistema gov.br. O botão "Exportar XLSX para MAPA" gera o arquivo no formato exato (3 abas: Estoque Inicial, Entradas, Saídas em gramas; NFs com 9 dígitos; datas dd/mm/aaaa). Acesse: <a href="https://www.gov.br/pt-br/servicos/insercao-de-obrigatorios-para-os-fabricantes-distribuidores-comerciantes-de-produtos-de-uso-veterinario-sob-controle-especial" target="_blank" style="color:var(--ac);font-size:.75rem">Sistema MAPA</a>. Dúvidas: duvidas.relatoriocontrolados@agro.gov.br</p>
 </div>
 <div class="cd" style="font-family:var(--mono);font-size:.7rem;color:var(--mt);line-height:1.6">
 ⚠ Todos os dados (CPFs, endereços, prescritores, movimentos, histórico) ficam no <strong>localStorage</strong>. Não limpe os dados do navegador sem exportar backup.
@@ -463,7 +428,7 @@ footer{margin-top:40px;text-align:center;font-family:var(--mono);font-size:.68re
 </div></div>
 <footer>
 <p style="font-size:.72rem;color:var(--acd);font-weight:600">Controle Especial · Fórmula Animal</p>
-<p style="margin-top:4px">Processamento 100% local — nenhum dado enviado a servidores · Portaria MAPA nº 837/2025 · v6.0</p>
+<p style="margin-top:4px">Processamento 100% local — nenhum dado enviado a servidores · Portaria MAPA nº 837/2025 · v5.0</p>
 <p style="margin-top:8px;padding-top:8px;border-top:1px solid var(--bd)">Desenvolvido por <strong style="color:var(--tx)">Paulo Edson Fernandes</strong> · <a href="mailto:pauloedsfer@gmail.com" style="color:var(--ac);text-decoration:none">pauloedsfer@gmail.com</a> · <a href="https://wa.me/5562991992833" style="color:var(--ac);text-decoration:none">WhatsApp (62) 99199-2833</a></p>
 </footer>
 </div>
