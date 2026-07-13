@@ -1418,7 +1418,10 @@ function exportMapa(){
   const ws1=XLSX.utils.aoa_to_sheet(eiData);
   ws1['!cols']=[{wch:22},{wch:14}];
   // Force Quantidade column as text (for zeros to show properly)
-  forceTextCol(ws1,1,1);
+  for(let r=1;r<=estoqueInicial.length;r++){
+    const addr=XLSX.utils.encode_cell({r:r,c:1});
+    if(ws1[addr]){const v=parseFloat(ws1[addr].v)||0;ws1[addr].t='s';ws1[addr].z='@';ws1[addr].v=v.toFixed(1);}
+  }
   XLSX.utils.book_append_sheet(wb,ws1,'Estoque inicial');
   
   // Sheet 2: Entradas
@@ -1450,6 +1453,94 @@ function exportMapa(){
   mapaLog('  Saídas: '+saidas.length+' registros ('+saidas.filter(s=>s.tipoSaida==='Venda').length+' vendas, '+saidas.filter(s=>s.tipoSaida==='Perda').length+' perdas)','ok');
   if(warnings>0)mapaLog('⚠ '+warnings+' alertas — revise os campos em branco antes de enviar ao sistema MAPA','warn');
   else mapaLog('✓ Nenhum alerta. Arquivo pronto para upload no sistema gov.br','ok');
+}
+
+// ═══ VALIDAR PRESCRITORES ONLINE ═══
+function validarPrescritores(){
+  const uf=document.getElementById('sip-uf')?document.getElementById('sip-uf').value:'GO';
+  const urlNovo=SIPEAGRO_NOVO_URL+'/'+uf+'.json';
+  const urlAntigo=SIPEAGRO_ANTIGO_URL+'/'+uf+'.json';
+  
+  document.getElementById('lb-mapa').innerHTML='';document.getElementById('lb-mapa').style.display='none';
+  mapaLog('🔍 Validando prescritores contra SIPEAGRO online ('+uf+')...','ok');
+  
+  // Fetch both databases
+  Promise.all([
+    fetch(urlNovo).then(r=>r.ok?r.json():{}).catch(()=>({})),
+    fetch(urlAntigo).then(r=>r.ok?r.json():{}).catch(()=>({}))
+  ]).then(([dataNovo,dataAntigo])=>{
+    const nNovo=Object.keys(dataNovo).length;
+    const nAntigo=Object.keys(dataAntigo).length;
+    mapaLog('Base carregada: '+nNovo+' vets (novo) + '+nAntigo+' vets (antigo)','ok');
+    
+    const prescs=ldP();
+    let ok=0,nomeErro=0,numErro=0,naoEncontrado=0,semCrmv=0;
+    
+    for(const[nome,p]of Object.entries(prescs)){
+      if(!p.crmv){semCrmv++;continue;}
+      const ck=p.crmv.replace(/\D/g,'').replace(/^0+/,'')||'0';
+      
+      // Check in both databases
+      const matchNovo=dataNovo[ck];
+      const matchAntigo=dataAntigo[ck];
+      
+      if(!matchNovo&&!matchAntigo){
+        naoEncontrado++;
+        mapaLog('  ✗ '+nome+' (CRMV '+p.crmv+') — não encontrado no SIPEAGRO '+uf,'warn');
+        continue;
+      }
+      
+      // Get official data
+      const sipNomeNovo=matchNovo?(Array.isArray(matchNovo)?matchNovo[1]:''):'';
+      const sipNumNovo=matchNovo?(Array.isArray(matchNovo)?matchNovo[0]:matchNovo):'';
+      const sipNomeAntigo=matchAntigo?(Array.isArray(matchAntigo)?matchAntigo[1]:''):'';
+      const sipNumAntigo=matchAntigo?(Array.isArray(matchAntigo)?matchAntigo[0]:matchAntigo):'';
+      const sipNome=sipNomeNovo||sipNomeAntigo;
+      
+      let issues=[];
+      
+      // Check name
+      const nomeNorm=nome.trim().toUpperCase().replace(/\s+/g,' ');
+      const sipNomeNorm=(sipNome||'').trim().toUpperCase().replace(/\s+/g,' ');
+      if(sipNomeNorm&&nomeNorm!==sipNomeNorm){
+        issues.push('Nome: "'+nome+'" ≠ SIPEAGRO "'+sipNome+'"');
+        nomeErro++;
+      }
+      
+      // Check cadastro number
+      if(p.cadMapa){
+        const cadNorm=p.cadMapa.trim();
+        let numOk=false;
+        if(sipNumNovo&&cadNorm===sipNumNovo)numOk=true;
+        if(sipNumAntigo&&cadNorm===sipNumAntigo)numOk=true;
+        if(!numOk){
+          const esperado=[];
+          if(sipNumAntigo)esperado.push(sipNumAntigo+' (antigo)');
+          if(sipNumNovo)esperado.push(sipNumNovo+' (novo)');
+          issues.push('Cadastro: "'+cadNorm+'" ≠ SIPEAGRO '+esperado.join(' / '));
+          numErro++;
+        }
+      }
+      
+      if(issues.length){
+        mapaLog('  ⚠ '+nome+' (CRMV '+p.crmv+'):','warn');
+        issues.forEach(i=>mapaLog('      '+i,'warn'));
+      } else {
+        ok++;
+      }
+    }
+    
+    mapaLog('','ok');
+    mapaLog('═══ RESULTADO DA VALIDAÇÃO ═══','ok');
+    mapaLog('  ✓ OK: '+ok+' prescritores validados','ok');
+    if(nomeErro)mapaLog('  ⚠ Nomes divergentes: '+nomeErro+' (use Buscar SIPEAGRO Online para corrigir)','warn');
+    if(numErro)mapaLog('  ⚠ Cadastros divergentes: '+numErro,'warn');
+    if(naoEncontrado)mapaLog('  ✗ Não encontrados: '+naoEncontrado,'warn');
+    if(semCrmv)mapaLog('  — Sem CRMV cadastrado: '+semCrmv+' (não validados)','warn');
+    if(!nomeErro&&!numErro&&!naoEncontrado)mapaLog('  ✓ Todos os prescritores estão consistentes com o SIPEAGRO!','ok');
+  }).catch(err=>{
+    mapaLog('✗ Erro ao buscar bases online: '+err.message,'warn');
+  });
 }
 
 // ═══ PDF PARSER — RELATÓRIO MAPA (v5.0) ═══
